@@ -1,0 +1,413 @@
+-- ============================================================================
+-- rlms_law_install.sql — 송무(law) 옵션 모듈 설치 ① DDL·채번·코드·시드
+--   (LAW_MODULE_DESIGN.md §4·§5, 2026-07-21 생성)
+--
+--   구성: 1) LAW_* 18테이블 DDL + 코멘트 전수 + 인덱스
+--         2) COMTECOPSEQ 채번 17행
+--         3) ccm 공통코드 15그룹(레거시 tbetia09/10 — SB_CD 보존)
+--         4) LAW_COURT 대표 시드 22행(레거시 tbetia31 발췌 — 부족분은 운영 등록)
+--         5) LAW_CALC_RATE 현행 요율 1세트(APPLY_DT=20260101)
+--
+--   실행: RLMS 계정. 재실행 시 CREATE 는 ORA-00955(무시), 시드는 NOT EXISTS 스킵.
+--   ⚠️ 옵션 메뉴·권한은 rlms_law_menu.sql 별도(§9 설치 순서: regroup 후 install, menu, 재기동).
+-- ============================================================================
+
+-- ============================================================
+-- 1) 테이블 DDL — 공통 규약(§4.1):
+--    날짜 VARCHAR(8) 'YYYYMMDD', 시각 VARCHAR(14) 'YYYYMMDDHH24MISS',
+--    금액 DECIMAL(19), 코드 VARCHAR(10), 감사 4종(REG/UPD_USER_ID·DT).
+-- ============================================================
+
+-- ── 1.1 LAW_SUIT 사건 마스터 (심급 단위 1행) ← tbetia11 ──
+CREATE TABLE LAW_SUIT (
+    SUIT_ID           BIGINT      NOT NULL COMMENT '사건 ID (채번 LAW_SUIT_ID) ← tbetia11.LAWSUIT_SEQ',
+    FIRST_SUIT_ID     BIGINT COMMENT '사건군 최초 심급 사건 ID — 최초심=자기 ID, 상급심=원심 값 승계(레거시 tbetia16/33 재귀 연결 폐지)',
+    CASE_KIND_CD      VARCHAR(10) COMMENT '소송구분(LAW_CASE_KIND) — 통계 4축 S001민사/S002행정/S012국가/S009심판 ← tbetia11.LAWSUIT_CASE_KIND_CD',
+    INSTANCE_CD       VARCHAR(10) COMMENT '심급(LAW_INSTANCE) — 심급별 통계 3축 S001/S002/S004 ← tbetia11.LAWSUIT_REL_KIND_CD',
+    COURT_ID          BIGINT COMMENT '법원 ID (LAW_COURT FK, 직접입력 시 NULL) ← tbetia11.COURT_SEQ',
+    COURT_NM          VARCHAR(150) COMMENT '법원명 (표시용 — 선택 시 LAW_COURT.COURT_NM 복사, 직접입력 허용) ← tbetia11.COURT_NM_IN',
+    CASE_YEAR         VARCHAR(4) COMMENT '사건번호 연도 (YYYY) ← tbetia11.LAWSUIT_MGMT_YYYY',
+    CASE_SIGN_CD      VARCHAR(10) COMMENT '사건부호(LAW_CASE_SIGN — 대법원 사건부호) ← tbetia11.LAWSUIT_MGMT_SIGN',
+    CASE_SERIAL       VARCHAR(20) COMMENT '사건번호 일련 ← tbetia11.LAWSUIT_MGMT_ISSUE_NO',
+    CASE_NO           VARCHAR(100) COMMENT '사건번호 표시용 결합 (예: 2026가합1234) ← tbetia11.LAWSUIT_CASE_NO',
+    CASE_NM_CD        VARCHAR(10) COMMENT '사건명 코드(LAW_CASE_NM, S999=직접입력) ← tbetia11.LAWSUIT_CASE_NM_CD',
+    CASE_NM           VARCHAR(200) COMMENT '사건명 (코드 선택 시 명칭 복사, 직접입력 허용) ← tbetia11.CASE_NM_IN',
+    CIVIL_CASE_CD     VARCHAR(10) COMMENT '사건유형(LAW_CIVIL_CASE) ← tbetia11.CIVIL_CASE_CD',
+    ITPT_KIND_CD      VARCHAR(10) COMMENT '제·피소구분(LAW_ITPT_KIND) ← tbetia11.LAWSUIT_ITPT_KIND_CD',
+    SUIT_AMT          DECIMAL(19) COMMENT '소가(소송가액, 원) ← tbetia11.LAWSUIT_APLY_AMT',
+    OFFICE_RECEIPT_DT VARCHAR(8) COMMENT '행정청 접수일 (YYYYMMDD) ← tbetia11.OFFICE_RECEIPT_DT',
+    FR_DT             VARCHAR(8) COMMENT '소제기일 (YYYYMMDD) ← tbetia11.LAWSUIT_FR_DT',
+    STC_DT            VARCHAR(8) COMMENT '최종 선고일 (YYYYMMDD) ← tbetia11.LAWSUIT_STC_DT',
+    DCSN_DT           VARCHAR(8) COMMENT '확정일 (YYYYMMDD) ← tbetia11.LAWSUIT_DCSN_DT',
+    RSLT_KIND_CD      VARCHAR(10) COMMENT '소송결과(LAW_RESULT) — 승소그룹 S002/S003/S005/S006/S008/S997, 패소그룹 S004/S100/S101/S102/S998 ← tbetia11.LAWSUIT_RSLT_KIND_CD',
+    RSLT_KIND_NM      VARCHAR(200) COMMENT '소송결과 직접입력 명칭 ← tbetia11.LAWSUIT_RSLT_KIND_NM',
+    WIN_AMT           DECIMAL(19) COMMENT '승소금액(원) ← tbetia11.LAWSUIT_DECS_AMT(승패소 단일컬럼의 분해)',
+    LOSE_AMT          DECIMAL(19) COMMENT '패소금액(원) ← tbetia11.LAWSUIT_DECS_AMT(승패소 단일컬럼의 분해)',
+    LOSS_CAUSE_CD     VARCHAR(10) COMMENT '패소원인(LAW_LOSS_CAUSE) ← tbetia11.LOSS_CAUSE_CD',
+    MERGE_CASE        VARCHAR(500) COMMENT '병합사건 텍스트(사건번호 나열)',
+    COST_FIX_DT       VARCHAR(8) COMMENT '소송비용 확정결정일 (YYYYMMDD) ← tbetia11.LAWSUIT_FEE_DECISION_DT',
+    COST_FIX_AMT      DECIMAL(19) COMMENT '소송비용 확정액(원) ← tbetia11.FEE_DCSN_AMT',
+    COST_RCV_AMT      DECIMAL(19) COMMENT '소송비용 회수액(원) ← tbetia11.FEE_RETR_AMT',
+    RETAINER_AMT      DECIMAL(19) COMMENT '착수금(원, 예비 — 선임 보수관리는 비범위) ← tbetia11.RETAINING_FEE',
+    SUCCESS_AMT       DECIMAL(19) COMMENT '성공보수(원, 예비) ← tbetia11.CONTINGENT_FEE',
+    SPECIAL_DESC      VARCHAR(4000) COMMENT '특이사항 ← tbetia11.LAWSUIT_MGMT_BLBD_CONTN',
+    DEL_YN            CHAR(1) DEFAULT 'N' NOT NULL COMMENT '소프트삭제 여부 (Y/N) ← tbetia11.DEL_YN',
+    REG_USER_ID       VARCHAR(20) COMMENT '등록자 ID (COMTNEMPLYRINFO.EMPLYR_ID)',
+    REG_DT            VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID       VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT            VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT PRIMARY KEY (SUIT_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 사건 마스터 — 심급 단위 1행, 사건군 그룹핑은 FIRST_SUIT_ID(§4.5) ← tbetia11';
+
+CREATE INDEX IX_LAW_SUIT_01 ON LAW_SUIT (DEL_YN, CASE_KIND_CD);
+CREATE INDEX IX_LAW_SUIT_02 ON LAW_SUIT (FIRST_SUIT_ID);
+CREATE INDEX IX_LAW_SUIT_03 ON LAW_SUIT (CASE_NO);
+CREATE INDEX IX_LAW_SUIT_04 ON LAW_SUIT (FR_DT);
+CREATE INDEX IX_LAW_SUIT_05 ON LAW_SUIT (RSLT_KIND_CD);
+
+-- ── 1.2 LAW_SUIT_PARTY 당사자 ← tbetia14 ──
+CREATE TABLE LAW_SUIT_PARTY (
+    PARTY_ID    BIGINT    NOT NULL COMMENT '당사자 ID (채번 LAW_PARTY_ID) ← tbetia14.ITPT_SEQ',
+    SUIT_ID     BIGINT    NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    PARTY_TYPE  CHAR(1)       NOT NULL COMMENT '당사자 구분 (P=원고, D=피고, S=보조참가인) ← tbetia14.ACUSR_DFDNT_TYPE',
+    PARTY_NM    VARCHAR(200) COMMENT '성명(법인명) ← tbetia14.ITPT_NM',
+    BIRTH       VARCHAR(10) COMMENT '생년월일 (YYYYMMDD 또는 YYMMDD — 주민번호 입력 시 앞6자리 자동 파생) ← tbetia14.BIRTH',
+    JUMIN_ENC   VARCHAR(256) COMMENT '주민등록번호 양방향 암호문(EgovGeneralCryptoService PBE, 키=Globals.law.cryptoKey, Base64) — 평문 저장·화면 복호 표시 금지, 항상 마스킹(§4.4) ← tbetia14.JUMIN_NO(레거시 평문의 암호화 대체)',
+    AGENT_NM    VARCHAR(100) COMMENT '대리인 성명',
+    SORT_ORDR   INT DEFAULT 0 COMMENT '표시 순서 (0부터 — 목록 대표자=구분별 최솟값 행)',
+    REG_USER_ID VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT      VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT      VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_PARTY PRIMARY KEY (PARTY_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 사건 당사자 (원고/피고/보조참가인) ← tbetia14';
+
+CREATE INDEX IX_LAW_SUIT_PARTY_01 ON LAW_SUIT_PARTY (SUIT_ID);
+
+-- ── 1.3 LAW_SUIT_STAFF 소송수행자 ← tbetia50 ──
+CREATE TABLE LAW_SUIT_STAFF (
+    STAFF_ID    BIGINT  NOT NULL COMMENT '수행자 행 ID (채번 LAW_STAFF_ID) ← tbetia50.SEQ',
+    SUIT_ID     BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    ORGNZT_ID   CHAR(20) COMMENT '수행 부서 ID (COMTNORGNZTINFO.ORGNZT_ID) ← tbetia50.TEAM_CD(김해 코드의 표준 대체)',
+    STAFF_NM    VARCHAR(100) COMMENT '수행자 성명 ← tbetia50.NAME',
+    ASSIGN_DT   VARCHAR(8) COMMENT '지정일 (YYYYMMDD)',
+    SORT_ORDR   INT DEFAULT 0 COMMENT '표시 순서 (0=수행자, 1=보조수행자 — 일정관리 열 규약)',
+    REG_USER_ID VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT      VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT      VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_STAFF PRIMARY KEY (STAFF_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 사건 소송수행자 (부서=표준 COMTNORGNZTINFO 연동 — 레거시 김해 부서코드 A33 폐기) ← tbetia50';
+
+CREATE INDEX IX_LAW_SUIT_STAFF_01 ON LAW_SUIT_STAFF (SUIT_ID);
+
+-- ── 1.4 LAW_SUIT_LAND 사건토지 ← tbetia53(+tbetia11 토지 필드) ──
+CREATE TABLE LAW_SUIT_LAND (
+    LAND_ID     BIGINT  NOT NULL COMMENT '토지 행 ID (채번 LAW_LAND_ID)',
+    SUIT_ID     BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    LOCATION    VARCHAR(255) COMMENT '소재지 (지오코딩 주소) ← tbetia11.CASE_LAND_LOCATION',
+    JIBUN       VARCHAR(255) COMMENT '지번 ← tbetia11.CASE_LAND_JIBUN',
+    SORT_ORDR   INT DEFAULT 0 COMMENT '표시 순서',
+    REG_USER_ID VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT      VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT      VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_LAND PRIMARY KEY (LAND_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 사건토지 (행 단위 정규화 — 사건지번표시도(Kakao Geocoder) 원천) ← tbetia53 + tbetia11.CASE_LAND_*';
+
+CREATE INDEX IX_LAW_SUIT_LAND_01 ON LAW_SUIT_LAND (SUIT_ID);
+
+-- ── 1.5 LAW_SUIT_PROG 진행상황·기일 겸용 ← tbetia19 ──
+CREATE TABLE LAW_SUIT_PROG (
+    PROG_ID      BIGINT  NOT NULL COMMENT '진행 행 ID (채번 LAW_PROG_ID) ← tbetia19.DYPR_SEQ',
+    SUIT_ID      BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    PROG_KIND_CD VARCHAR(10) COMMENT '진행종류(LAW_PROG_KIND — 기일/피고제출/원고제출/본부보고) ← tbetia19.DDT_CD',
+    DYPR_KIND_CD VARCHAR(10) COMMENT '기일구분(LAW_DYPR_KIND — 진행종류가 기일일 때) ← tbetia19.DYPR_KIND_CD',
+    PROG_DT      VARCHAR(8) COMMENT '진행(기일)일자 (YYYYMMDD) ← tbetia19.DYPR_DT',
+    PROG_TM      VARCHAR(4) COMMENT '시각 (HHMM) ← tbetia19.DYPR_TM',
+    PLACE        VARCHAR(200) COMMENT '장소 ← tbetia19.DYPR_PLC',
+    PROG_DESC    VARCHAR(1000) COMMENT '내용 ← tbetia19.DYPR_DESC',
+    STAT_CD      VARCHAR(10) COMMENT '진행상태(LAW_PROG_STAT — 진행/완료) ← tbetia19.PROG_STAT_CD',
+    RESULT_DESC  VARCHAR(1000) COMMENT '결과',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_PROG PRIMARY KEY (PROG_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 진행상황·기일 겸용 — 소송등록 진행상황 그리드와 일정관리(달력)가 같은 테이블(§7.5) ← tbetia19';
+
+CREATE INDEX IX_LAW_SUIT_PROG_01 ON LAW_SUIT_PROG (SUIT_ID);
+CREATE INDEX IX_LAW_SUIT_PROG_02 ON LAW_SUIT_PROG (PROG_DT);
+
+-- ── 1.6 LAW_SUIT_RSLT_HIST 결과변경 이력 ← tbetia34 슬림화 ──
+CREATE TABLE LAW_SUIT_RSLT_HIST (
+    HIST_ID      BIGINT  NOT NULL COMMENT '이력 ID (채번 LAW_RSLT_HIST_ID)',
+    SUIT_ID      BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    HIST_SEQ     INT   DEFAULT 1 COMMENT '사건 내 이력 순번 (1부터 증가)',
+    RSLT_KIND_CD VARCHAR(10) COMMENT '변경 시점 소송결과(LAW_RESULT)',
+    RSLT_KIND_NM VARCHAR(200) COMMENT '변경 시점 소송결과 직접입력 명칭',
+    END_DT       VARCHAR(8) COMMENT '종결일 (YYYYMMDD)',
+    HIST_DESC    VARCHAR(1000) COMMENT '변경 사유·비고',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_RSLT_HIST PRIMARY KEY (HIST_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 결과변경 이력 — 결과 필드만 이력화(레거시 전체 스냅샷 폐지) ← tbetia34';
+
+CREATE INDEX IX_LAW_SUIT_RSLT_HIST_01 ON LAW_SUIT_RSLT_HIST (SUIT_ID);
+
+-- ── 1.7 LAW_SUIT_DOC 소송문서 (표준 첨부 + 승인 워크플로 §7.2) ← tbetia17 ──
+CREATE TABLE LAW_SUIT_DOC (
+    DOC_ID       BIGINT  NOT NULL COMMENT '문서 ID (채번 LAW_DOC_ID) ← tbetia17.DOC_SEQ',
+    SUIT_ID      BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    DOC_KIND_CD  VARCHAR(10) COMMENT '문서종류(LAW_DOC_KIND — 소장~항고장 21종) ← tbetia17.DOC_KIND_CD',
+    DOC_TITL     VARCHAR(200) COMMENT '문서 제목 ← tbetia17.DOC_TITL',
+    DOC_MEMO     VARCHAR(4000) COMMENT '메모 ← tbetia17.DOC_MEMO',
+    ATCH_FILE_ID CHAR(20) COMMENT '첨부파일 ID (표준 COMTNFILE — 다중 파일은 COMTNFILEDETAIL 행들, 레거시 tbetia18 대체)',
+    APP_STS_CD   VARCHAR(10) DEFAULT 'S001' COMMENT '승인상태(LAW_DOC_APP_STATUS — S001 대기/S002 승인/S003 반려, 기본 대기) ← tbetia17.DOC_APP_STS(텍스트의 코드화)',
+    APP_USER_ID  VARCHAR(20) COMMENT '승인(반려)자 ID ← tbetia17.DOC_APP_EMP_NO',
+    APP_USER_NM  VARCHAR(60) COMMENT '승인(반려)자 성명 ← tbetia17.DOC_APP_EMP_NM',
+    APP_DT       VARCHAR(14) COMMENT '승인(반려)일시 (YYYYMMDDHH24MISS) ← tbetia17.DOC_APP_DTTM',
+    APP_OPINION  VARCHAR(1000) COMMENT '승인 의견·반려 사유 ← tbetia17.DOC_APP_BLBD',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자(신청인) ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_DOC PRIMARY KEY (DOC_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 소송문서 — 첨부=표준 COMTNFILE/COMTNFILEDETAIL(다중), 등록=승인대기·수정 시 대기 리셋(§7.2) ← tbetia17';
+
+CREATE INDEX IX_LAW_SUIT_DOC_01 ON LAW_SUIT_DOC (SUIT_ID);
+CREATE INDEX IX_LAW_SUIT_DOC_02 ON LAW_SUIT_DOC (APP_STS_CD);
+
+-- ── 1.8 LAW_SUIT_COST 소송비용 ← tbetia20+21 통합 ──
+CREATE TABLE LAW_SUIT_COST (
+    COST_ID      BIGINT  NOT NULL COMMENT '비용 행 ID (채번 LAW_COST_ID)',
+    SUIT_ID      BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    COST_KIND_CD VARCHAR(10) COMMENT '비용종류(LAW_COST_KIND — 인지액/송달료/지연이자/공탁금/변호사비용/조세비용/조정중재/기타)',
+    COST_AMT     DECIMAL(19) COMMENT '금액(원)',
+    COST_DESC    VARCHAR(1000) COMMENT '내역',
+    PAY_DMND_DT  VARCHAR(8) COMMENT '지급요청일 (YYYYMMDD)',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_COST PRIMARY KEY (COST_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 소송비용 (단일행 — 레거시 신청/지급 2테이블 통합) ← tbetia20+tbetia21';
+
+CREATE INDEX IX_LAW_SUIT_COST_01 ON LAW_SUIT_COST (SUIT_ID);
+
+-- ── 1.9 LAW_LAWYER 변호사 명부 ← tbetia51 ──
+CREATE TABLE LAW_LAWYER (
+    LAWYER_ID   BIGINT  NOT NULL COMMENT '변호사 ID (채번 LAW_LAWYER_ID) ← tbetia51.SEQ',
+    LAW_FIRM    VARCHAR(200) COMMENT '법무법인명(텍스트) ← tbetia51.LAW_FIRM',
+    LAWYER_NM   VARCHAR(100) COMMENT '변호사 성명 ← tbetia51.NAME',
+    EMAIL       VARCHAR(100) COMMENT '이메일 ← tbetia51.EMAIL',
+    TEL         VARCHAR(50) COMMENT '전화(사무실) ← tbetia51.TEL',
+    MOBILE      VARCHAR(50) COMMENT '휴대폰 ← tbetia51.PHONE',
+    DEL_YN      CHAR(1) DEFAULT 'N' NOT NULL COMMENT '소프트삭제 여부 (Y/N — 선임 참조 시 삭제 차단 안내 §7.7)',
+    REG_USER_ID VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT      VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT      VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_LAWYER PRIMARY KEY (LAWYER_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 변호사 명부 — 법무법인은 텍스트(마스터 비범위 §1.2) ← tbetia51';
+
+
+-- ── 1.10 LAW_SUIT_LAWYER 선임 ← tbetia52 ──
+CREATE TABLE LAW_SUIT_LAWYER (
+    ASSIGN_ID    BIGINT  NOT NULL COMMENT '선임 ID (채번 LAW_ASSIGN_ID) ← tbetia52.SEQ',
+    SUIT_ID      BIGINT  NOT NULL COMMENT '사건 ID (LAW_SUIT FK)',
+    LAWYER_ID    BIGINT  NOT NULL COMMENT '변호사 ID (LAW_LAWYER FK) ← tbetia52.TBETIA51_SEQ',
+    ASSIGN_DT    VARCHAR(8) COMMENT '선임일 (YYYYMMDD)',
+    ATCH_FILE_ID CHAR(20) COMMENT '계약서 첨부파일 ID (표준 COMTNFILE)',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_LAWYER PRIMARY KEY (ASSIGN_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 선임 (사건×변호사) — 만족도 평가 대상 단위(§4.3) ← tbetia52';
+
+CREATE INDEX IX_LAW_SUIT_LAWYER_01 ON LAW_SUIT_LAWYER (SUIT_ID);
+CREATE INDEX IX_LAW_SUIT_LAWYER_02 ON LAW_SUIT_LAWYER (LAWYER_ID);
+
+-- ── 1.11 LAW_COURT 법원 ← tbetia31 ──
+CREATE TABLE LAW_COURT (
+    COURT_ID       BIGINT  NOT NULL COMMENT '법원 ID (채번 LAW_COURT_ID — 시드 최대 194, NEXT_ID 200부터) ← tbetia31.COURT_SEQ',
+    UPPER_COURT_ID BIGINT COMMENT '상위 법원 ID (루트=NULL) ← tbetia31.SPST_COURT_SEQ',
+    COURT_NM       VARCHAR(150) COMMENT '법원명 ← tbetia31.COURT_NM',
+    SORT_ORDR      BIGINT DEFAULT 0 COMMENT '표시 순서 ← tbetia31.ORD',
+    USE_YN         CHAR(1) DEFAULT 'Y' NOT NULL COMMENT '사용 여부 (Y/N)',
+    RMK            VARCHAR(1000) COMMENT '비고 — 레거시 승계 시 해당 법원 취급 사건부호(LAW_CASE_SIGN) 파이프 목록 ← tbetia31.RMK',
+    REG_USER_ID    VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT         VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID    VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT         VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_COURT PRIMARY KEY (COURT_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 법원 마스터 (계층 — 루트 COURT_ID=0) ← tbetia31. 대표 시드 22행, 부족분은 운영 등록';
+
+
+-- ── 1.12 LAW_SUIT_REQ 소송의뢰 ← tbetia40 ──
+CREATE TABLE LAW_SUIT_REQ (
+    REQ_ID        BIGINT  NOT NULL COMMENT '의뢰 ID (채번 LAW_REQ_ID) ← tbetia40.REQ_SEQ',
+    REQ_TITL      VARCHAR(200) COMMENT '사건명(의뢰 제목) ← tbetia40.REQ_TITL',
+    REQ_CN        VARCHAR(4000) COMMENT '사실관계 ← tbetia40.REQ_BLBD_CONTN',
+    REQ_ORGNZT_ID CHAR(20) COMMENT '의뢰부서 ID (COMTNORGNZTINFO — 신청자 소속 자동) ← tbetia40.REQ_PSTN_CD',
+    REQ_USER_ID   VARCHAR(20) COMMENT '의뢰담당자 ID ← tbetia40.REQ_EMP_NO',
+    REQ_USER_NM   VARCHAR(60) COMMENT '의뢰담당자 성명 ← tbetia40.REQ_EMP_NM',
+    REQ_DT        VARCHAR(8) COMMENT '의뢰일자 (YYYYMMDD)',
+    STATUS_CD     VARCHAR(10) DEFAULT 'S001' COMMENT '의뢰상태(LAW_REQ_STATUS — S001 신청/S002 승인/S003 반려) ← tbetia40.REQ_RSLT_PROC',
+    APRV_USER_ID  VARCHAR(20) COMMENT '승인(반려)자 ID',
+    APRV_USER_NM  VARCHAR(60) COMMENT '승인(반려)자 성명',
+    APRV_DT       VARCHAR(14) COMMENT '승인(반려)일시 (YYYYMMDDHH24MISS)',
+    RETURN_RSN    VARCHAR(1000) COMMENT '반려 사유 (그리드 사유 열)',
+    SUIT_ID       BIGINT COMMENT '승인 후 연계 등록된 사건 ID (LAW_SUIT — 소송등록 시 역기입)',
+    ATCH_FILE_ID  CHAR(20) COMMENT '기타자료 첨부파일 ID (표준 COMTNFILE, 다중)',
+    REG_USER_ID   VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT        VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID   VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT        VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_REQ PRIMARY KEY (REQ_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 소송의뢰 — 사용자(front) 신청, 법무팀 승인/반려, 승인 후 소송등록 연계(§7.8·7.9) ← tbetia40';
+
+CREATE INDEX IX_LAW_SUIT_REQ_01 ON LAW_SUIT_REQ (STATUS_CD);
+CREATE INDEX IX_LAW_SUIT_REQ_02 ON LAW_SUIT_REQ (REG_USER_ID);
+
+-- ── 1.13 LAW_SUIT_REQ_HIST 의뢰 사건경과 ← tbetia41 ──
+CREATE TABLE LAW_SUIT_REQ_HIST (
+    HIST_ID      BIGINT  NOT NULL COMMENT '경과 행 ID (채번 LAW_REQ_HIST_ID) ← tbetia41.HST_REQ_SEQ',
+    REQ_ID       BIGINT  NOT NULL COMMENT '의뢰 ID (LAW_SUIT_REQ FK)',
+    STA_DT       VARCHAR(8) COMMENT '기간 시작일 (YYYYMMDD) ← tbetia41.STA_DTTM',
+    END_DT       VARCHAR(8) COMMENT '기간 종료일 (YYYYMMDD) ← tbetia41.END_DTTM',
+    HIST_CN      VARCHAR(1000) COMMENT '경과 내용 ← tbetia41.HST_BLBD_CONTN',
+    ATCH_FILE_ID CHAR(20) COMMENT '행별 첨부파일 ID (표준 COMTNFILE)',
+    SORT_ORDR    INT DEFAULT 0 COMMENT '표시 순서',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_REQ_HIST PRIMARY KEY (HIST_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 소송의뢰 사건경과 내역 (행별 첨부 1건) ← tbetia41';
+
+CREATE INDEX IX_LAW_SUIT_REQ_HIST_01 ON LAW_SUIT_REQ_HIST (REQ_ID);
+
+-- ── 1.14 LAW_SUIT_REQ_HELPER 의뢰 소송수행 보조자 ← ReqLawsuitChps(tbetia13 재사용분) ──
+CREATE TABLE LAW_SUIT_REQ_HELPER (
+    HELPER_ID   BIGINT  NOT NULL COMMENT '보조자 행 ID (채번 LAW_REQ_HELPER_ID) ← tbetia13.LAWSUIT_CHPS_SEQ',
+    REQ_ID      BIGINT  NOT NULL COMMENT '의뢰 ID (LAW_SUIT_REQ FK) ← tbetia13.REQ_SEQ',
+    DEPT_NM     VARCHAR(100) COMMENT '부서명 ← tbetia13.PSTN_NM',
+    HELPER_NM   VARCHAR(60) COMMENT '담당자 성명 ← tbetia13.CHPS_EMP_NM',
+    TEL         VARCHAR(50) COMMENT '전화 ← tbetia13.CHPS_EMP_PHONE',
+    MOBILE      VARCHAR(50) COMMENT '휴대폰 ← tbetia13.CHPS_EMP_MOBILE',
+    EMAIL       VARCHAR(100) COMMENT '이메일 ← tbetia13.CHPS_EMP_EMAIL',
+    SORT_ORDR   INT DEFAULT 0 COMMENT '표시 순서',
+    REG_USER_ID VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT      VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT      VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SUIT_REQ_HELPER PRIMARY KEY (HELPER_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 소송의뢰 수행 보조자 (부서명은 자유 텍스트 — 외부 인원 허용) ← tbetia13(ReqLawsuitChps 재사용분)';
+
+CREATE INDEX IX_LAW_SUIT_REQ_HELPER_01 ON LAW_SUIT_REQ_HELPER (REQ_ID);
+
+-- ── 1.15 LAW_SEIZE 가압류·가처분 ← tc_seize ──
+CREATE TABLE LAW_SEIZE (
+    SEIZE_ID     BIGINT  NOT NULL COMMENT '압류 ID (채번 LAW_SEIZE_ID) ← tc_seize.SEIZE_ID',
+    CREDITOR     VARCHAR(200) COMMENT '채권자 ← tc_seize.CHEKWON',
+    DEBTOR       VARCHAR(200) COMMENT '채무자 ← tc_seize.CHEMOO',
+    THIRD_DEBTOR VARCHAR(200) COMMENT '제3채무자 ← tc_seize.CHEMOO3',
+    ORGNZT_ID    CHAR(20) COMMENT '담당부서 ID (COMTNORGNZTINFO) ← tc_seize.DAMDANG_BUSEO(텍스트의 표준 대체)',
+    COURT_NM     VARCHAR(150) COMMENT '관할법원명 ← tc_seize.BUBWON',
+    CASE_NO      VARCHAR(100) COMMENT '사건번호 ← tc_seize.SAGUN_NO',
+    MEMO         LONGTEXT COMMENT '메모 ← tc_seize.MEMO',
+    READ_CNT     BIGINT DEFAULT 0 COMMENT '조회수 (상세 열람 시 증가) ← tc_seize.READ_CNT',
+    ATCH_FILE_ID CHAR(20) COMMENT '첨부파일 ID (표준 COMTNFILE — 문서파일 5개·10MB 제한) ← tc_seizeattach 대체',
+    REG_USER_ID  VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT       VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID  VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT       VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_SEIZE PRIMARY KEY (SEIZE_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 압류관리(가압류·가처분) — 게시판형, 첨부 5개·10MB 제한(서버 검증 §7.10) ← tc_seize';
+
+CREATE INDEX IX_LAW_SEIZE_01 ON LAW_SEIZE (REG_DT);
+
+-- ── 1.16 LAW_COURT_RECEIPT 법원서류접수 ← tbetia44 ──
+CREATE TABLE LAW_COURT_RECEIPT (
+    RECEIPT_ID     BIGINT  NOT NULL COMMENT '접수 ID (채번 LAW_RECEIPT_ID) ← tbetia44.ACC_SEQ',
+    RECEIPT_TITL   VARCHAR(200) COMMENT '제목 ← tbetia44.ACC_TITL',
+    ORGNZT_ID      CHAR(20) COMMENT '등록부서 ID (등록자 소속 자동, COMTNORGNZTINFO) ← tbetia44.ACC_PSTN_CD',
+    REL_ORGNZT_ID1 CHAR(20) COMMENT '관련부서 1 (COMTNORGNZTINFO) ← tbetia44.ACC_PSTN_CD2',
+    REL_ORGNZT_ID2 CHAR(20) COMMENT '관련부서 2 (COMTNORGNZTINFO)',
+    ATCH_FILE_ID   CHAR(20) COMMENT '관련자료 첨부파일 ID (표준 COMTNFILE) ← tbetia44.ACC_FILE_NM 대체',
+    REG_USER_ID    VARCHAR(20) COMMENT '등록자 ID ← tbetia44.ACC_EMP_NO',
+    REG_DT         VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS) ← tbetia44.ACC_REG_DTTM',
+    UPD_USER_ID    VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT         VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_COURT_RECEIPT PRIMARY KEY (RECEIPT_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 법원서류접수 — 접수+관련부서 지정·표시까지(알림 발송은 비범위 §1.2) ← tbetia44';
+
+CREATE INDEX IX_LAW_COURT_RECEIPT_01 ON LAW_COURT_RECEIPT (REG_DT);
+
+-- ── 1.17 LAW_CALC_RATE 계산기 요율 (신규 — 레거시 JS 하드코딩의 DB화 §4.3) ──
+CREATE TABLE LAW_CALC_RATE (
+    RATE_ID     BIGINT   NOT NULL COMMENT '요율 행 ID (채번 LAW_CALC_RATE_ID)',
+    CALC_TYPE   VARCHAR(20) NOT NULL COMMENT '계산기 타입 — STAMP(인지액 구간표)/STAMP_MULT(인지액 사건종류 배율)/POST_UNIT(송달료 우편료 단가)/POST_COUNT(송달료 사건유형별 회수)/LAWYER(변호사비 산입 구간표)/LEGAL_INT(법정이율 프리셋)',
+    ITEM_CD     VARCHAR(20) COMMENT '항목 식별 — STAMP_MULT=사건종류(C1~C8, 레거시 select 값 승계)·MIN_AMT(최소 인지액), POST_COUNT=송달 사건유형(T01~T17), LEGAL_INT=CIVIL/COMM/SOCHOK. 구간표·단가 행은 NULL',
+    APPLY_DT    VARCHAR(8)  NOT NULL COMMENT '적용시작일 (YYYYMMDD — 개정 시행일. 같은 타입·항목에 시점별 세트 공존)',
+    SECTION_AMT DECIMAL(19) COMMENT '구간 하한(소가, 원 — 구간표 행만. 단일값 행은 NULL)',
+    RATE_VAL    DECIMAL(12,6) COMMENT '값 — 타입별 의미: 율(0.005)·단가(5500)·배율(1.5)·회수(15)·이율(12). 배율 행에서 0이면 ADD_AMT 고정액 사건',
+    ADD_AMT     DECIMAL(19) COMMENT '구간 가산액(원 — 인지액·변호사비 구간표) 또는 고정액(배율 행 RATE_VAL=0 일 때)',
+    RMK         VARCHAR(200) COMMENT '근거 (고시·규칙 번호 등)',
+    USE_YN      CHAR(1) DEFAULT 'Y' NOT NULL COMMENT '사용 여부 (Y/N — 과거 세트 이력 보존용 소프트 삭제 §7.13)',
+    REG_USER_ID VARCHAR(20) COMMENT '등록자 ID',
+    REG_DT      VARCHAR(14) COMMENT '등록일시 (YYYYMMDDHH24MISS)',
+    UPD_USER_ID VARCHAR(20) COMMENT '수정자 ID',
+    UPD_DT      VARCHAR(14) COMMENT '수정일시 (YYYYMMDDHH24MISS)',
+    CONSTRAINT PK_LAW_CALC_RATE PRIMARY KEY (RATE_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 소송비용 계산기 요율 — 타입×항목×적용시작일 시점별 세트, 기준일 조회=APPLY_DT 이하 최신 세트(§7.4·7.13). 공식 뼈대는 JS, 숫자만 DB';
+
+CREATE INDEX IX_LAW_CALC_RATE_01 ON LAW_CALC_RATE (CALC_TYPE, APPLY_DT);
+
+-- ── 1.18 LAW_LAWYER_SATIS 법무법인 만족도(간이) ← tbetia45 대체 ──
+CREATE TABLE LAW_LAWYER_SATIS (
+    ASSIGN_ID BIGINT   NOT NULL COMMENT '선임 ID (LAW_SUIT_LAWYER FK — 복합 PK)',
+    EMPLYR_ID VARCHAR(20) NOT NULL COMMENT '평가자 ID (COMTNEMPLYRINFO.EMPLYR_ID — 복합 PK, 1인 1회)',
+    SCORE     SMALLINT    NOT NULL COMMENT '별점 (1~5)',
+    OPINION   VARCHAR(1000) COMMENT '의견 (선택)',
+    REG_DT    VARCHAR(14) COMMENT '최초 평가일시 (YYYYMMDDHH24MISS)',
+    UPD_DT    VARCHAR(14) COMMENT '재평가일시 (YYYYMMDDHH24MISS — MERGE 갱신)',
+    CONSTRAINT PK_LAW_LAWYER_SATIS PRIMARY KEY (ASSIGN_ID, EMPLYR_ID)
+)
+  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='송무 법무법인 만족도(간이 별점+의견) — 평가 대상=선임(사건×변호사) 단위, 1인 1회 MERGE(TB_PROM_STSFDG 패턴) ← tbetia45(9문항 가중 설문의 간소화 대체 §1.2)';
+
+COMMIT;
+
+COMMIT;
+
+COMMIT;
+
+COMMIT;
+
+-- 검증:
+--   코멘트 전수: SELECT COUNT(*) FROM user_col_comments WHERE table_name LIKE 'LAW_%' AND comments IS NULL;  (0 이어야)
+--                SELECT COUNT(*) FROM user_tab_comments WHERE table_name LIKE 'LAW_%' AND comments IS NULL;  (0 이어야)
+--   코드:       SELECT CODE_ID, COUNT(*) FROM COMTCCMMNDETAILCODE WHERE CODE_ID LIKE 'LAW_%' GROUP BY CODE_ID ORDER BY CODE_ID;
+--   법원:       SELECT COUNT(*) FROM LAW_COURT;  (22)
+--   요율:       SELECT CALC_TYPE, COUNT(*) FROM LAW_CALC_RATE GROUP BY CALC_TYPE;  (STAMP 5/STAMP_MULT 8/POST_UNIT 1/POST_COUNT 17/LAWYER 7/LEGAL_INT 3)

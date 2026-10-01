@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app id="WebApp_ID" version="3.1" xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd">
+<!--
+    수정일          수성자                          수정내용
+   ==========      ========      =================================================
+   2011.9.19        이기하         filter 정리
+   2013.5.31        이기하         미사용 filter 정리(.mdo, .action)
+   2016.6.34        장동한         WebApplicationInitializer 방식으로 변경
+-->
+
+    <welcome-file-list>
+        <welcome-file>index.jsp</welcome-file>
+        <welcome-file>egovDevIndex.jsp</welcome-file>
+    </welcome-file-list>
+
+    <!--
+      정적 리소스를 Tomcat DefaultServlet 으로 명시 매핑.
+      Spring DispatcherServlet 이 "/" 매핑이라 가로채는 것을 우회.
+    -->
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/resources/*</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/css/*</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/js/*</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/images/*</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/html/*</url-pattern>
+    </servlet-mapping>
+
+    <!--
+      (2026-08-07) SiteMesh 2 데코레이터 필터 제거.
+        SiteMesh 는 "응답을 버퍼에 받아 파싱 → 데코레이터로 forward" 구조라 Servlet 6.0(Tomcat 10.1+)
+        에서 응답이 빈 채 커밋된다(2.4.2 / 3.1.0 / 3.2.3 / 3.3.0-M3 전부 동일, dispatch-mode 무관).
+        2007년이 마지막 릴리스라 해결 전망도 없다.
+        → 레이아웃을 JSP 태그파일로 이관: 화면 JSP 가 <lay:layout> 으로 자기 셸을 감싼다.
+           디스패처 /WEB-INF/tags/layout.tag · 셸 /WEB-INF/tags/shell/*.tag
+           URL→셸 매핑 /WEB-INF/layouts.xml (egovframework.com.cmm.util.EgovLayoutResolver)
+        버퍼링도 dispatch 도 없어 Servlet 6.x 실패 모드가 성립하지 않는다 → Tomcat 11 동작 확인.
+    -->
+
+    <!--
+      .jspf 조각의 인코딩 선언.
+      static include 는 부모의 pageEncoding 이 전파되지 않아 조각마다 인코딩을 알려 줘야 하는데,
+      조각 안에 <%@ page pageEncoding %> 를 쓰면 그 조각을 include 하는 쪽이 태그파일(.tag)일 때
+      "page 지시어는 태그 파일 내에서 사용될 수 없습니다" 로 번역이 깨진다.
+      (mgr 셸이 /WEB-INF/jsp/law/cost/_calcModal.jspf 를 include 한다.)
+      → 조각의 page 지시부를 빼고 여기서 일괄 선언한다.
+    -->
+    <jsp-config>
+        <jsp-property-group>
+            <url-pattern>*.jspf</url-pattern>
+            <page-encoding>UTF-8</page-encoding>
+        </jsp-property-group>
+    </jsp-config>
+
+    <login-config>
+        <auth-method>BASIC</auth-method>
+    </login-config>
+
+    <session-config>
+        <session-timeout>60</session-timeout>
+    	<tracking-mode>COOKIE</tracking-mode>
+    </session-config>
+
+    <error-page>
+      <error-code>404</error-code>
+      <location>/code404.jsp</location>
+    </error-page>
+    
+    <error-page>
+      <error-code>500</error-code>
+      <location>/code500.jsp</location>
+    </error-page>
+
+</web-app>

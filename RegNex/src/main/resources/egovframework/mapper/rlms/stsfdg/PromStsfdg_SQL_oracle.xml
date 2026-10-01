@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/stsfdg/PromStsfdg_SQL_oracle.xml
+
+  규정 만족도 조사 (TB_PROM_STSFDG) — 회차별 1인 1회, 재참여=MERGE 갱신.
+  날짜는 SINS_DT/SUPD_DT VARCHAR2(14) 'YYYYMMDDHH24MISS' 저장, 표시는 YYYY-MM-DD 로 절단.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.stsfdg.mapper.PromStsfdgMapper">
+
+	<!-- 기간(참여/갱신일) 필터 — 규정측 14자리(YYYYMMDDHH24MISS) 문자열 비교. 별칭 s 고정. -->
+	<sql id="promPeriod">
+		<if test="fromDt != null">
+		   AND NVL(s.SUPD_DT, s.SINS_DT) <![CDATA[ >= ]]> REPLACE(#{fromDt}, '-', '')
+		</if>
+		<if test="toDt != null">
+		   AND NVL(s.SUPD_DT, s.SINS_DT) <![CDATA[ <= ]]> REPLACE(#{toDt}, '-', '') || '235959'
+		</if>
+	</sql>
+
+	<select id="selectList" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT s.SINS_ID AS "wrterId",
+		       NVL(u.USER_NM, '사용자') AS "wrterNm",
+		       s.ISTSFDG AS "stsfdg",
+		       s.SSTSFDG_CN AS "content",
+		       SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 1, 4) || '-' ||
+		       SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 5, 2) || '-' ||
+		       SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 7, 2) AS "regDt"
+		  FROM TB_PROM_STSFDG s
+		  LEFT OUTER JOIN COMVNUSERMASTER u ON u.ESNTL_ID = s.SINS_ID
+		 WHERE s.IPROM_NO = #{promNo}
+		<include refid="promPeriod"/>
+		 ORDER BY NVL(s.SUPD_DT, s.SINS_DT) DESC, s.SINS_ID
+	</select>
+
+	<select id="selectSummary" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT COUNT(*) AS "cnt",
+		       ROUND(NVL(AVG(ISTSFDG), 0), 1) AS "avg"
+		  FROM TB_PROM_STSFDG
+		 WHERE IPROM_NO = #{promNo}
+	</select>
+
+	<select id="selectMine" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT ISTSFDG AS "stsfdg", SSTSFDG_CN AS "content"
+		  FROM TB_PROM_STSFDG
+		 WHERE IPROM_NO = #{promNo} AND SINS_ID = #{userId}
+	</select>
+
+	<update id="mergeStsfdg" parameterType="map">
+		MERGE INTO TB_PROM_STSFDG t
+		USING ( SELECT #{promNo} AS IPROM_NO, #{userId} AS SINS_ID FROM DUAL ) s
+		   ON ( t.IPROM_NO = s.IPROM_NO AND t.SINS_ID = s.SINS_ID )
+		 WHEN MATCHED THEN UPDATE SET
+		      t.ISTSFDG = #{stsfdg},
+		      t.SSTSFDG_CN = #{stsfdgCn,jdbcType=VARCHAR},
+		      t.SUPD_DT = TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+		 WHEN NOT MATCHED THEN INSERT ( IPROM_NO, SINS_ID, ISTSFDG, SSTSFDG_CN )
+		      VALUES ( #{promNo}, #{userId}, #{stsfdg}, #{stsfdgCn,jdbcType=VARCHAR} )
+	</update>
+
+	<delete id="deleteMine" parameterType="map">
+		DELETE FROM TB_PROM_STSFDG
+		 WHERE IPROM_NO = #{promNo} AND SINS_ID = #{userId}
+	</delete>
+
+	<!-- ═══ 관리자 현황/집계 (stsfdgStats) ═══ -->
+
+	<!-- 규정 회차별 집계 — 옵션 켠 회차(참여 0 포함) + 옵션을 꺼도 참여 데이터가 남은 회차 -->
+	<sql id="promAggWhere">
+		 WHERE ( p.SSTSFDG_YN = 'Y' OR a.IPROM_NO IS NOT NULL )
+		<if test="keyword != null and keyword != ''">
+		   AND UPPER(REPLACE(p.STITLE, ' ', '')) LIKE '%' || UPPER(REPLACE(#{keyword}, ' ', '')) || '%'
+		</if>
+	</sql>
+
+	<sql id="promAggJoin">
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE c ON p.ICATE_NO = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO ob ON ob.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		  LEFT OUTER JOIN ( SELECT s.IPROM_NO, COUNT(*) CNT, ROUND(AVG(s.ISTSFDG), 1) AVGV,
+		                           MAX(NVL(s.SUPD_DT, s.SINS_DT)) LASTDT
+		                      FROM TB_PROM_STSFDG s
+		                     WHERE 1 = 1
+		                    <include refid="promPeriod"/>
+		                     GROUP BY s.IPROM_NO ) a ON a.IPROM_NO = p.IPROM_NO
+	</sql>
+
+	<select id="selectPromAggList" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT p.IPROM_NO AS "promNo", p.STITLE AS "title", p.ILAW_NO AS "lawNo",
+			       c.SNAME AS "cateNm", ob.ORGNZT_NM AS "buseoNm",
+			       p.SSTSFDG_YN AS "stsfdgYn", p.SEXISTING_YN AS "existingYn", p.SDISP_YN AS "dispYn",
+			       NVL(a.CNT, 0) AS "cnt", a.AVGV AS "avg",
+			       <!-- NVL2 필수: NULL 에 하이픈 2개가 연결되면 Oracle 은 NULL 이 아닌 하이픈 문자열을 만든다(참여 0건 회차 날짜 오표시 방지) -->
+			       NVL2(a.LASTDT, SUBSTR(a.LASTDT, 1, 4) || '-' || SUBSTR(a.LASTDT, 5, 2) || '-' || SUBSTR(a.LASTDT, 7, 2), NULL) AS "lastDt"
+			<include refid="promAggJoin"/>
+			<include refid="promAggWhere"/>
+			 ORDER BY NVL(a.CNT, 0) DESC, p.STITLE, p.ILAW_NO DESC, p.IPROM_NO DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="countPromAgg" parameterType="map" resultType="int">
+		SELECT COUNT(*)
+		<include refid="promAggJoin"/>
+		<include refid="promAggWhere"/>
+	</select>
+
+	<!-- 기간(참여일) 필터 — 게시판측 DATE 컬럼. 별칭 s 고정. -->
+	<sql id="bbsPeriod">
+		<if test="fromDt != null">
+		   AND s.FRST_REGIST_PNTTM <![CDATA[ >= ]]> TO_DATE(#{fromDt}, 'YYYY-MM-DD')
+		</if>
+		<if test="toDt != null">
+		   AND s.FRST_REGIST_PNTTM <![CDATA[ < ]]> TO_DATE(#{toDt}, 'YYYY-MM-DD') + 1
+		</if>
+	</sql>
+
+	<!-- 게시글별 집계 — BBS_ID 는 CHAR 고정폭이라 출력·비교 모두 RTRIM 으로 패딩 무해화 -->
+	<sql id="bbsAggBody">
+		  FROM COMTNSTSFDG s
+		  JOIN COMTNBBS b ON b.NTT_ID = s.NTT_ID AND b.BBS_ID = s.BBS_ID
+		  JOIN COMTNBBSMASTER m ON m.BBS_ID = s.BBS_ID
+		 WHERE s.USE_AT = 'Y'
+		<include refid="bbsPeriod"/>
+		<if test="keyword != null and keyword != ''">
+		   AND ( UPPER(REPLACE(b.NTT_SJ, ' ', '')) LIKE '%' || UPPER(REPLACE(#{keyword}, ' ', '')) || '%'
+		      OR UPPER(REPLACE(m.BBS_NM, ' ', '')) LIKE '%' || UPPER(REPLACE(#{keyword}, ' ', '')) || '%' )
+		</if>
+		 GROUP BY s.BBS_ID, m.BBS_NM, s.NTT_ID, b.NTT_SJ, b.USE_AT
+	</sql>
+
+	<select id="selectBbsAggList" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT RTRIM(s.BBS_ID) AS "bbsId", m.BBS_NM AS "bbsNm", s.NTT_ID AS "nttId", b.NTT_SJ AS "title",
+			       b.USE_AT AS "articleUseAt",
+			       COUNT(*) AS "cnt", ROUND(AVG(s.STSFDG), 1) AS "avg",
+			       TO_CHAR(MAX(s.FRST_REGIST_PNTTM), 'YYYY-MM-DD') AS "lastDt"
+			<include refid="bbsAggBody"/>
+			 ORDER BY COUNT(*) DESC, MAX(s.FRST_REGIST_PNTTM) DESC, s.NTT_ID DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="countBbsAgg" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			SELECT s.BBS_ID
+			<include refid="bbsAggBody"/>
+		)
+	</select>
+
+	<select id="selectBbsDetailList" parameterType="map" resultType="java.util.LinkedHashMap">
+		SELECT s.STSFDG_NO AS "stsfdgNo", NVL(u.USER_NM, s.WRTER_NM) AS "wrterNm",
+		       s.STSFDG AS "stsfdg", s.STSFDG_CN AS "content",
+		       TO_CHAR(s.FRST_REGIST_PNTTM, 'YYYY-MM-DD HH24:MI') AS "regDt"
+		  FROM COMTNSTSFDG s
+		  LEFT OUTER JOIN COMVNUSERMASTER u ON u.ESNTL_ID = s.FRST_REGISTER_ID
+		 WHERE RTRIM(s.BBS_ID) = RTRIM(#{bbsId}) AND s.NTT_ID = #{nttId} AND s.USE_AT = 'Y'
+		<include refid="bbsPeriod"/>
+		 ORDER BY s.FRST_REGIST_PNTTM
+	</select>
+
+	<delete id="deleteByAdmin" parameterType="map">
+		DELETE FROM TB_PROM_STSFDG
+		 WHERE IPROM_NO = #{promNo} AND SINS_ID = #{sinsId}
+	</delete>
+
+	<update id="softDeleteBbsStsfdg" parameterType="map">
+		UPDATE COMTNSTSFDG SET USE_AT = 'N'
+		 WHERE STSFDG_NO = #{stsfdgNo} AND USE_AT = 'Y'
+	</update>
+
+	<!-- ═══ 엑셀 내보내기 — 전체 참여 상세(필터 무관) ═══ -->
+
+	<select id="selectPromExportList" resultType="java.util.LinkedHashMap">
+		SELECT p.STITLE AS "title", c.SNAME AS "cateNm", ob.ORGNZT_NM AS "buseoNm",
+		       p.ILAW_NO AS "lawNo", p.SEXISTING_YN AS "existingYn",
+		       NVL(u.USER_NM, '사용자') AS "wrterNm", s.ISTSFDG AS "stsfdg", s.SSTSFDG_CN AS "content",
+		       SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 1, 4) || '-' || SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 5, 2) || '-' ||
+		       SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 7, 2) || ' ' || SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 9, 2) || ':' ||
+		       SUBSTR(NVL(s.SUPD_DT, s.SINS_DT), 11, 2) AS "regDt"
+		  FROM TB_PROM_STSFDG s
+		  JOIN TB_PROM p ON p.IPROM_NO = s.IPROM_NO
+		  LEFT OUTER JOIN TB_CATE c ON p.ICATE_NO = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO ob ON ob.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		  LEFT OUTER JOIN COMVNUSERMASTER u ON u.ESNTL_ID = s.SINS_ID
+		 WHERE 1 = 1
+		<include refid="promPeriod"/>
+		 ORDER BY p.STITLE, p.IPROM_NO DESC, NVL(s.SUPD_DT, s.SINS_DT)
+	</select>
+
+	<select id="selectBbsExportList" resultType="java.util.LinkedHashMap">
+		SELECT m.BBS_NM AS "bbsNm", b.NTT_SJ AS "title",
+		       NVL(u.USER_NM, s.WRTER_NM) AS "wrterNm", s.STSFDG AS "stsfdg", s.STSFDG_CN AS "content",
+		       TO_CHAR(s.FRST_REGIST_PNTTM, 'YYYY-MM-DD HH24:MI') AS "regDt",
+		       b.USE_AT AS "articleUseAt"
+		  FROM COMTNSTSFDG s
+		  JOIN COMTNBBS b ON b.NTT_ID = s.NTT_ID AND b.BBS_ID = s.BBS_ID
+		  JOIN COMTNBBSMASTER m ON m.BBS_ID = s.BBS_ID
+		  LEFT OUTER JOIN COMVNUSERMASTER u ON u.ESNTL_ID = s.FRST_REGISTER_ID
+		 WHERE s.USE_AT = 'Y'
+		<include refid="bbsPeriod"/>
+		 ORDER BY m.BBS_NM, b.NTT_ID, s.FRST_REGIST_PNTTM
+	</select>
+
+</mapper>

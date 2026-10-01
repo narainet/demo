@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/promwork/PromWork_SQL_oracle.xml
+
+  법령 승인 워크플로(TB_PROM_WRK) + 액션 로그(TB_PROM_ACT_LOG) MyBatis 매핑.
+   - namespace = @Mapper 인터페이스 FQN
+   - 상태 전이는 row 추가 방식 (레거시 와 동일) — 워크 row 누적 = 이력
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.promwork.mapper.PromWorkMapper">
+
+	<resultMap id="promWorkResult" type="narainet.rlms.promwork.service.PromWorkVO">
+		<result property="workNo"      column="IPWRK_NO"/>
+		<result property="promNo"      column="IPROM_NO"/>
+		<result property="sysId"       column="SSYS_ID"/>
+		<result property="status"      column="SSTATUS"/>
+		<result property="userId"      column="SUSER_ID"/>
+		<result property="userNm"      column="SUSER_NM"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="reason"      column="SREASON"   jdbcType="CLOB"/>
+		<result property="actNm"       column="SACT_NM"/>
+		<!-- 조회 부가 -->
+		<result property="promTitle"   column="PROM_TITLE"/>
+		<result property="promGubunId" column="PROM_GUBUN_ID"/>
+		<result property="cateNm"      column="CATE_NM"/>
+		<result property="buseoNm"     column="BUSEO_NM"/>
+		<result property="latestYn"    column="LATEST_YN"/>
+		<result property="dutyNo"      column="DUTY_NO"/>
+	</resultMap>
+
+	<resultMap id="actLogResult" type="narainet.rlms.promwork.service.PromWorkActLogVO">
+		<result property="actLogNo" column="IPALOG_NO"/>
+		<result property="promNo"   column="IPROM_NO"/>
+		<result property="sysId"    column="SSYS_ID"/>
+		<result property="refTable" column="SREF_TABLE"/>
+		<result property="refNo"    column="IREF_NO"/>
+		<result property="actType"  column="SACT_TYPE"/>
+		<result property="actNm"    column="SACT_NM"/>
+		<result property="actDc"    column="SACT_DC"/>
+		<result property="userId"   column="SUSER_ID"/>
+		<result property="userNm"   column="SUSER_NM"/>
+		<result property="insDt"    column="SINS_DT"/>
+		<result property="workNo"   column="IPWRK_NO"/>
+		<result property="fieldLog" column="SFIELD_LOG" jdbcType="CLOB"/>
+		<!-- 조회 부가 (TB_PROM 조인) -->
+		<result property="promTitle" column="PROM_TITLE"/>
+	</resultMap>
+
+	<!-- SINS_DT 는 초까지 저장된 문자열(정렬·기간검색 기준). 화면에는 분까지만 보이면 되므로
+	     조회 결과만 앞 16자로 자른다 — 저장값·ORDER BY·WHERE 는 원본 그대로다 (2026-07-31). -->
+	<sql id="promWorkColumns">
+		w.IPWRK_NO, w.IPROM_NO, w.SSYS_ID, w.SSTATUS,
+		w.SUSER_ID, w.SUSER_NM, SUBSTR(w.SINS_DT, 1, 16) AS SINS_DT, w.SREASON, w.SACT_NM
+	</sql>
+
+	<!-- ============================================================ -->
+	<!-- 조회                                                          -->
+	<!-- ============================================================ -->
+
+	<select id="selectPromWorkList" parameterType="narainet.rlms.promwork.service.PromWorkVO"
+			resultMap="promWorkResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promWorkColumns"/>,
+				p.STITLE     AS PROM_TITLE,
+				p.SGUBUN_ID  AS PROM_GUBUN_ID,
+				c.SNAME      AS CATE_NM,
+				b.ORGNZT_NM  AS BUSEO_NM,
+				<!-- 최신행 판정은 전체 TB_PROM_WRK 기준 상관 서브쿼리 — 윈도우함수는 상태필터(st=REQ 등)가
+				     적용된 집합에서 MAX 를 구해, 이미 처리된 옛 승인요청 행에도 LATEST_YN='Y' 가 붙어
+				     승인/반려 버튼이 남던 버그(중복승인→옛 회차 재승격 위험) 교정(2026-07-08). -->
+				CASE WHEN w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2
+				                          WHERE w2.IPROM_NO = w.IPROM_NO )
+				     THEN 'Y' ELSE 'N' END AS LATEST_YN,
+				<!-- 필수 열람 지정번호 - 승인완료 행 [지정/지정됨] 라벨 판단 + [현황] 딥링크(dutyNo) 용.
+				     2026-07-31 에 DUTY_YN(있음/없음) 을 이 값으로 대체 — 현황 화면이 dutyNo 로 상세를 연다.
+				     회차당 1건이 정상이나 방어적으로 MAX (2026-07-28 도입) -->
+				( SELECT MAX(rd.IDUTY_NO) FROM TB_READ_DUTY rd WHERE rd.IPROM_NO = w.IPROM_NO ) AS DUTY_NO
+			  FROM TB_PROM_WRK w
+			  LEFT OUTER JOIN TB_PROM  p ON w.IPROM_NO  = p.IPROM_NO
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			<where>
+				<!-- ★회차(IPROM_NO)당 최신 워크행 1건만 — 상태 전이마다 row 가 쌓여 같은 규정이
+				     편집중/승인요청/승인완료로 여러 줄 보이며 목록이 로그처럼 읽히던 것을 접었다(2026-07-31).
+				     전이 내역은 [⋯] > 이력(selectPromWorkHistory) 에 그대로 남아 있다.
+				     이 조건 때문에 상태 검색의 의미도 '거쳐간 상태'가 아니라 '현재 상태'가 된다(배지 기준과 일치). -->
+				AND w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2 WHERE w2.IPROM_NO = w.IPROM_NO )
+				<if test="searchUserNm != null and searchUserNm != ''">
+				   AND UPPER(w.SUSER_NM) LIKE '%' || UPPER(#{searchUserNm}) || '%'
+				</if>
+				<if test="searchStatus != null and searchStatus != ''">
+				   AND w.SSTATUS = #{searchStatus}
+				</if>
+				<!-- 합성 필터 — 배지 카운트(selectPendingApprovalCnt/selectMyRejectedCnt)와 동일 기준 (2026-07-09).
+			     TB_PROM 실존 조건 = 배지와 동일(고아 워크행 제외, 2026-07-20). 수정권한 축 폐지(2026-07-20)
+			     최신행 조건은 위로 올라가 공통이 되었다(2026-07-31). -->
+				<if test="searchPending">
+				   AND w.SSTATUS = '승인요청'
+				   AND EXISTS ( SELECT 1 FROM TB_PROM px WHERE px.IPROM_NO = w.IPROM_NO )
+				</if>
+				<if test="searchMyRejectedUserId != null and searchMyRejectedUserId != ''">
+				   AND w.SSTATUS = '승인반려'
+				   AND EXISTS ( SELECT 1 FROM TB_PROM px WHERE px.IPROM_NO = w.IPROM_NO )
+				   AND ( SELECT r.SUSER_ID FROM TB_PROM_WRK r
+				          WHERE r.IPWRK_NO = ( SELECT MAX(r2.IPWRK_NO) FROM TB_PROM_WRK r2
+				                                WHERE r2.IPROM_NO = w.IPROM_NO
+				                                  AND r2.SSTATUS = '승인요청' ) ) = #{searchMyRejectedUserId}
+				</if>
+				<if test="searchFromDt != null and searchFromDt != ''">
+				   AND w.SINS_DT &gt;= #{searchFromDt}
+				</if>
+				<if test="searchToDt != null and searchToDt != ''">
+				   <![CDATA[ AND w.SINS_DT < #{searchToDt} || ' 23:59:59' ]]>
+				</if>
+			</where>
+			 ORDER BY w.SINS_DT DESC, w.IPWRK_NO DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectPromWorkListCnt" parameterType="narainet.rlms.promwork.service.PromWorkVO"
+			resultType="int">
+		<!-- ★조건은 selectPromWorkList 와 반드시 동일해야 한다 — 어긋나면 총건수/페이징이 목록과 따로 논다.
+		     2026-07-31 정리: 최신행 조건 추가 + 폐지된 수정권한 어휘('수정권한요청' 등) 제거
+		     + 목록에만 있던 TB_PROM 실존 가드 반영. -->
+		SELECT COUNT(*)
+		  FROM TB_PROM_WRK w
+		<where>
+			AND w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2 WHERE w2.IPROM_NO = w.IPROM_NO )
+			<if test="searchUserNm != null and searchUserNm != ''">
+			   AND UPPER(w.SUSER_NM) LIKE '%' || UPPER(#{searchUserNm}) || '%'
+			</if>
+			<if test="searchStatus != null and searchStatus != ''">
+			   AND w.SSTATUS = #{searchStatus}
+			</if>
+			<if test="searchPending">
+			   AND w.SSTATUS = '승인요청'
+			   AND EXISTS ( SELECT 1 FROM TB_PROM px WHERE px.IPROM_NO = w.IPROM_NO )
+			</if>
+			<if test="searchMyRejectedUserId != null and searchMyRejectedUserId != ''">
+			   AND w.SSTATUS = '승인반려'
+			   AND EXISTS ( SELECT 1 FROM TB_PROM px WHERE px.IPROM_NO = w.IPROM_NO )
+			   AND ( SELECT r.SUSER_ID FROM TB_PROM_WRK r
+			          WHERE r.IPWRK_NO = ( SELECT MAX(r2.IPWRK_NO) FROM TB_PROM_WRK r2
+			                                WHERE r2.IPROM_NO = w.IPROM_NO
+			                                  AND r2.SSTATUS = '승인요청' ) ) = #{searchMyRejectedUserId}
+			</if>
+			<if test="searchFromDt != null and searchFromDt != ''">
+			   AND w.SINS_DT &gt;= #{searchFromDt}
+			</if>
+			<if test="searchToDt != null and searchToDt != ''">
+			   <![CDATA[ AND w.SINS_DT < #{searchToDt} || ' 23:59:59' ]]>
+			</if>
+		</where>
+	</select>
+
+	<select id="selectPromWorkByNo" resultMap="promWorkResult">
+		SELECT
+			<include refid="promWorkColumns"/>,
+			p.STITLE     AS PROM_TITLE,
+			p.SGUBUN_ID  AS PROM_GUBUN_ID,
+			c.SNAME      AS CATE_NM,
+			b.ORGNZT_NM  AS BUSEO_NM
+		  FROM TB_PROM_WRK w
+		  LEFT OUTER JOIN TB_PROM  p ON w.IPROM_NO  = p.IPROM_NO
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE w.IPWRK_NO = #{workNo}
+	</select>
+
+	<!-- 승인요청/수정요청 폼 헤더용 — 법령 제목/분류/부서 표시를 위해 메타 조인 포함 -->
+	<select id="selectLatestByPromNo" resultMap="promWorkResult">
+		SELECT * FROM (
+			SELECT
+				<include refid="promWorkColumns"/>,
+				p.STITLE     AS PROM_TITLE,
+				p.SGUBUN_ID  AS PROM_GUBUN_ID,
+				c.SNAME      AS CATE_NM,
+				b.ORGNZT_NM  AS BUSEO_NM
+			  FROM TB_PROM_WRK w
+			  LEFT OUTER JOIN TB_PROM  p ON w.IPROM_NO  = p.IPROM_NO
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE w.IPROM_NO = #{promNo}
+			 ORDER BY w.SINS_DT DESC, w.IPWRK_NO DESC
+		) WHERE rownum = 1
+	</select>
+
+	<select id="selectListByPromNo" resultMap="promWorkResult">
+		SELECT
+			<include refid="promWorkColumns"/>,
+			NULL AS PROM_TITLE, NULL AS PROM_GUBUN_ID,
+			NULL AS CATE_NM, NULL AS BUSEO_NM
+		  FROM TB_PROM_WRK w
+		 WHERE w.IPROM_NO = #{promNo}
+		 ORDER BY w.SINS_DT DESC, w.IPWRK_NO DESC
+	</select>
+
+	<!-- ── 알림/배지 카운트 (관리자 헤더·대시보드) ──────────────────────
+	     '최신 워크행' = 회차(IPROM_NO)별 MAX(IPWRK_NO). 상태 전이마다 새 row 누적이므로
+	     가장 큰 IPWRK_NO 가 현재 상태. (selectPromWorkList 의 LATEST_YN 과 동일 기준) -->
+
+	<!-- 승인자 배지: 최신 상태가 '승인요청' 인 회차 수 (전역 미처리 결재 — 수정권한 축은 2026-07-20 폐지).
+	     TB_PROM 실존 조건 — 규정 삭제 후 남은 고아 워크행이 유령 배지를 만들지 않게 (2026-07-20) -->
+	<select id="selectPendingApprovalCnt" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM_WRK w
+		 WHERE w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2
+		                       WHERE w2.IPROM_NO = w.IPROM_NO )
+		   AND w.SSTATUS = '승인요청'
+		   AND EXISTS ( SELECT 1 FROM TB_PROM p WHERE p.IPROM_NO = w.IPROM_NO )
+	</select>
+
+	<!-- 작성자 배지: 최신 상태가 반려이고, 그 회차의 마지막 '요청' 신청자(SUSER_ID)가 나인 회차 수 -->
+	<select id="selectMyRejectedCnt" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM_WRK w
+		 WHERE w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2
+		                       WHERE w2.IPROM_NO = w.IPROM_NO )
+		   AND w.SSTATUS = '승인반려'
+		   AND EXISTS ( SELECT 1 FROM TB_PROM p WHERE p.IPROM_NO = w.IPROM_NO )
+		   AND ( SELECT r.SUSER_ID FROM TB_PROM_WRK r
+		          WHERE r.IPWRK_NO = ( SELECT MAX(r2.IPWRK_NO) FROM TB_PROM_WRK r2
+		                                WHERE r2.IPROM_NO = w.IPROM_NO
+		                                  AND r2.SSTATUS = '승인요청' ) ) = #{userId}
+	</select>
+
+	<!-- 회차 행 잠금 — 승인/반려/요청 전이의 check-then-insert 경합 직렬화(동시 승인자).
+	     전이 트랜잭션 진입 시 이 잠금을 먼저 잡고 최신 상태를 재검사한다 (2026-07-20) -->
+	<select id="lockPromRow" resultType="java.lang.Long">
+		SELECT p.IPROM_NO FROM TB_PROM p WHERE p.IPROM_NO = #{promNo} FOR UPDATE
+	</select>
+
+	<!-- 규정(회차) 삭제 시 워크행 동반 정리 — 고아 워크행=유령 승인대기 배지의 원천.
+	     액션 로그(TB_PROM_ACT_LOG)는 감사 이력이라 보존 (2026-07-20) -->
+	<delete id="deleteByPromNo">
+		DELETE FROM TB_PROM_WRK WHERE IPROM_NO = #{promNo}
+	</delete>
+
+	<!-- ============================================================ -->
+	<!-- 변경                                                          -->
+	<!-- ============================================================ -->
+
+	<!-- SUSER_ID/SUSER_NM 은 NOT NULL (실DB) — 호출자가 못 채운 경우 공백 안전망 (actLog 와 동일 패턴) -->
+	<insert id="insertPromWork" parameterType="narainet.rlms.promwork.service.PromWorkVO">
+		INSERT INTO TB_PROM_WRK (
+			IPWRK_NO, IPROM_NO, SSTATUS,
+			SUSER_ID, SUSER_NM, SINS_DT, SREASON, SACT_NM
+		) VALUES (
+			#{workNo}, #{promNo}, #{status},
+			NVL(#{userId,jdbcType=VARCHAR}, ' '),
+			NVL(#{userNm,jdbcType=VARCHAR}, NVL(#{userId,jdbcType=VARCHAR}, ' ')),
+			TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'),
+			#{reason,jdbcType=CLOB}, #{actNm}
+		)
+	</insert>
+
+	<!-- ============================================================ -->
+	<!-- 액션 로그 (TB_PROM_ACT_LOG)                                   -->
+	<!-- ============================================================ -->
+
+	<!--
+	  ★ TB_PROM_ACT_LOG 는 SSYS_ID/IPWRK_NO/SACT_DC/SUSER_* 가 전부 NOT NULL (실DB 확인).
+	    SSYS_ID 미포함이면 ORA-01400 으로 감사로그가 통째로 유실된다 (2026-06-11 발견. 단일시스템
+	    전환 때 이 테이블만 NOT NULL 인 걸 놓침. 레거시 운영 데이터가 전부 동일 관행값이라 상수 기록).
+	    IPWRK_NO 는 작업 미연결 편집로그용 0 센티널 (FK 없음).
+	-->
+	<insert id="insertActLog" parameterType="narainet.rlms.promwork.service.PromWorkActLogVO">
+		INSERT INTO TB_PROM_ACT_LOG (
+			IPALOG_NO, IPROM_NO, SSYS_ID, SREF_TABLE, IREF_NO,
+			SACT_TYPE, SACT_NM, SACT_DC,
+			SUSER_ID, SUSER_NM, SINS_DT, IPWRK_NO, SFIELD_LOG
+		) VALUES (
+			#{actLogNo}, #{promNo}, 'RLMS', #{refTable}, #{refNo},
+			#{actType}, #{actNm}, NVL(#{actDc,jdbcType=VARCHAR}, ' '),
+			NVL(#{userId,jdbcType=VARCHAR}, ' '),
+			NVL(#{userNm,jdbcType=VARCHAR}, NVL(#{userId,jdbcType=VARCHAR}, ' ')),
+			TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'),
+			NVL(#{workNo,jdbcType=NUMERIC}, 0), #{fieldLog,jdbcType=CLOB}
+		)
+	</insert>
+
+	<select id="selectActLogListByPromNo" resultMap="actLogResult">
+		SELECT IPALOG_NO, IPROM_NO, SSYS_ID, SREF_TABLE, IREF_NO,
+		       SACT_TYPE, SACT_NM, SACT_DC,
+		       SUSER_ID, SUSER_NM, SUBSTR(SINS_DT, 1, 16) AS SINS_DT, IPWRK_NO, SFIELD_LOG
+		  FROM TB_PROM_ACT_LOG
+		 WHERE IPROM_NO = #{promNo}
+		 ORDER BY SINS_DT DESC, IPALOG_NO DESC
+	</select>
+
+	<!-- 제·개정내역 관리 — 전역 액션 로그 목록 (검색 + 페이징, 규정명 조인). selectPromWorkList 패턴 mirror -->
+	<sql id="actLogWhere">
+		<where>
+			<if test="searchActType != null and searchActType != ''">
+			   AND a.SACT_TYPE = #{searchActType}
+			</if>
+			<if test="searchKeyword != null and searchKeyword != ''">
+			   AND ( UPPER(p.STITLE)  LIKE '%' || UPPER(#{searchKeyword}) || '%'
+			      OR UPPER(a.SACT_NM)  LIKE '%' || UPPER(#{searchKeyword}) || '%'
+			      OR UPPER(a.SACT_DC)  LIKE '%' || UPPER(#{searchKeyword}) || '%'
+			      OR UPPER(a.SUSER_NM) LIKE '%' || UPPER(#{searchKeyword}) || '%' )
+			</if>
+			<if test="searchFromDt != null and searchFromDt != ''">
+			   AND a.SINS_DT &gt;= #{searchFromDt}
+			</if>
+			<if test="searchToDt != null and searchToDt != ''">
+			   <![CDATA[ AND a.SINS_DT < #{searchToDt} || ' 23:59:59' ]]>
+			</if>
+		</where>
+	</sql>
+
+	<select id="selectActLogList" parameterType="narainet.rlms.promwork.service.PromWorkActLogVO"
+			resultMap="actLogResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT a.IPALOG_NO, a.IPROM_NO, a.SSYS_ID, a.SREF_TABLE, a.IREF_NO,
+			       a.SACT_TYPE, a.SACT_NM, a.SACT_DC,
+			       a.SUSER_ID, a.SUSER_NM, SUBSTR(a.SINS_DT, 1, 16) AS SINS_DT, a.IPWRK_NO,
+			       p.STITLE AS PROM_TITLE
+			  FROM TB_PROM_ACT_LOG a
+			  LEFT OUTER JOIN TB_PROM p ON a.IPROM_NO = p.IPROM_NO
+			<include refid="actLogWhere"/>
+			 ORDER BY a.SINS_DT DESC, a.IPALOG_NO DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectActLogListCnt" parameterType="narainet.rlms.promwork.service.PromWorkActLogVO"
+			resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM_ACT_LOG a
+		  LEFT OUTER JOIN TB_PROM p ON a.IPROM_NO = p.IPROM_NO
+		<include refid="actLogWhere"/>
+	</select>
+
+</mapper>

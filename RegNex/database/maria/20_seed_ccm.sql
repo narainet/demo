@@ -1,0 +1,1062 @@
+--------------------------------------------------------------------------------
+-- 20_seed_ccm.sql — 공통코드(그룹+상세)
+-- RegNex(MariaDB) 클린 설치 세트 — 통합본(RLMS 스키마, 2026-08-03 라이브)에서 추출·제품 필터링.
+-- 실행 계정: regnex. 클라이언트 인코딩 UTF-8(AL32UTF8) 필수. 재실행 비멱등(단순 INSERT).
+--------------------------------------------------------------------------------
+
+
+-- ── 코드그룹 (19행) ──
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM001',
+        '등록구분',
+        '게시판, 커뮤니티, 동호회 등록구분코드',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        '게시판템플릿엔진',
+        '게시판 템플릿 렌더엔진코드(목록/상세 JSP 분기)',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        '처리상태',
+        '송수신 요청의 처리상태',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM013',
+        '회원상태',
+        '회원 가입 신청/승인/삭제를 위한 상태 구분',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM014',
+        '성별구분',
+        '남녀 성별 구분',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM017',
+        '휴일구분',
+        '휴일의 구분',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        '비밀번호 힌트',
+        '비밀번호 힌트 구분코드',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM024',
+        '발송결과구분',
+        '발송메일 수신결과 구분 코드',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM025',
+        '소속기관',
+        '소속기관정보를 관리할때 사용하는 구분코드(시스템별로 재정의)',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM028',
+        '질의응답처리상태',
+        'Q/A 처리상태코드',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM029',
+        '롤유형코드',
+        NULL,
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM033',
+        '시스템로그구분',
+        NULL,
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:37','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM101',
+        '게시판유형',
+        '게시판유형',
+        'Y',
+        'EFC',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COUNSEL_TYPE',
+        '자문유형',
+        '법령질의(lawquest) 자문유형. TB_CODE 이관(2026-07-09).',
+        'Y',
+        NULL,
+        STR_TO_DATE('2026-07-09 12:53:52','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        '규정상태구분',
+        'promwork SSTATUS 상태 어휘 9종. TB_CODE 이관(2026-07-09).',
+        'Y',
+        NULL,
+        STR_TO_DATE('2026-07-09 12:53:52','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_FILE',
+        '참조파일구분',
+        '관련자료 파일 유형. TB_CODE 이관(2026-07-09).',
+        'Y',
+        NULL,
+        STR_TO_DATE('2026-07-09 12:53:52','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_LINK',
+        '참조링크구분',
+        '관련자료 링크 유형. TB_CODE 이관(2026-07-09).',
+        'Y',
+        NULL,
+        STR_TO_DATE('2026-07-09 12:53:52','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('SGUBUN',
+        '규정 그룹',
+        'TB_CATE.SGUBUN_ID 의 표시 라벨/순서/사용여부. 레거시 분류관리 그룹 헤더.',
+        'Y',
+        NULL,
+        STR_TO_DATE('2026-05-13 11:01:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNCODE (CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT, CL_CODE, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('faqCode',
+        'FAQ카테고리',
+        'FAQ카테고리',
+        'Y',
+        NULL,
+        STR_TO_DATE('2026-07-09 09:23:46','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        NULL,
+        NULL);
+
+-- ── 상세코드 (86행) ──
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM001',
+        'REGC07',
+        '게시판사용자등록',
+        '게시판사용자등록',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM001',
+        'REGC01',
+        '단일 게시판 이용등록',
+        '단일 게시판 이용등록',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'MAGAZINE',
+        '웹진/앨범형',
+        '06_KRDS 카드 + 큰 대표이미지·요약 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'TAB',
+        '탭 분류형',
+        '11_KRDS 코드형 여분필드 탭 분류 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 14:20:03','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 14:20:03','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'HISTORY',
+        '연혁형',
+        '09_KRDS 연도별 연혁(게시기간=연혁일) 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 13:43:39','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 13:43:39','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'NOTICEHL',
+        '공지 강조형',
+        '10_KRDS 공지 상단 카드 강조 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 14:20:02','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 14:20:02','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'ARCHIVE',
+        '자료실형',
+        '12_KRDS 제목·기간·첨부·여분필드 자료실 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 14:20:03','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 14:20:03','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'CALENDAR',
+        '캘린더형',
+        '07_KRDS 월간 달력에 작성일로 배치 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 12:20:34','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 12:20:34','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'TIMELINE',
+        '타임라인형',
+        '08_KRDS 날짜별 세로 흐름 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 12:20:34','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 12:20:34','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'LIST',
+        '목록형',
+        '01_KRDS 표준 목록(테이블) 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'GALLERY',
+        '갤러리형',
+        '02_KRDS 카드 그리드(첨부 이미지 썸네일) 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'FAQ',
+        'FAQ형',
+        '03_KRDS 아코디언(질문 펼침) 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'QNA',
+        'Q&A형',
+        '04_KRDS 목록 + 답변상태 배지 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM005',
+        'GUEST',
+        '방명록형',
+        '05_KRDS 방명록 레이아웃 렌더엔진',
+        'Y',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-07-14 09:59:49','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        'S05',
+        '수신완료',
+        '수신완료',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        'S01',
+        '전송요청',
+        '전송요청',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        'S02',
+        '전송완료',
+        '전송완료',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        'S03',
+        '전송실패',
+        '전송실패',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        'S04',
+        '수신요청',
+        '수신요청',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM008',
+        'S06',
+        '수신실패',
+        '수신실패',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM013',
+        'A',
+        '회원 가입 신청 상태',
+        '회원 가입 신청 상태',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM013',
+        'D',
+        '회원 가입 삭제 상태',
+        '회원 가입 삭제 상태',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM013',
+        'P',
+        '회원 가입 승인 상태',
+        '회원 가입 승인 상태',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM014',
+        'F',
+        '여자',
+        '여자',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM014',
+        'M',
+        '남자',
+        '남자',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM017',
+        '03',
+        '임시공휴일',
+        '임시공휴일',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM017',
+        '01',
+        '법정휴일',
+        '법정휴일',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM017',
+        '02',
+        '법정공휴일',
+        '법정공휴일',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P11',
+        '나의 노래방 애창곡은?',
+        '나의 노래방 애창곡은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P10',
+        '내가 존경하는 인물은?',
+        '내가 존경하는 인물은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P09',
+        '인상 깊게 읽은 책 이름은?',
+        '인상 깊게 읽은 책 이름은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P08',
+        '가장 생각나는 친구 이름은?',
+        '가장 생각나는 친구 이름은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P07',
+        '받았던 선물 중 기억에 남는 독특한 선물은?',
+        '받았던 선물 중 기억에 남는 독특한 선물은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P06',
+        '오래도록 기억하고 싶은 날짜는?',
+        '오래도록 기억하고 싶은 날짜는?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P05',
+        '다른 사람은 모르는 나만의 신체비밀은?',
+        '다른 사람은 모르는 나만의 신체비밀은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P04',
+        '가장 기억에 남는 선생님 성함은?',
+        '가장 기억에 남는 선생님 성함은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P03',
+        '나의 보물 제1호는?',
+        '나의 보물 제1호는?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P02',
+        '나의 좌우명은?',
+        '나의 좌우명은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P01',
+        '가장 기억에 남는 장소는?',
+        '가장 기억에 남는 장소는?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P12',
+        '가장 감명깊게 본 영화는?',
+        '가장 감명깊게 본 영화는?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM022',
+        'P13',
+        '좋아하는 스포츠팀 이름은?',
+        '좋아하는 스포츠팀 이름은?',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM024',
+        'C',
+        '완료',
+        '완료',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM024',
+        'F',
+        '실패',
+        '실패',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM024',
+        'R',
+        '요청',
+        '요청',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM025',
+        '00000001',
+        '공공기관',
+        '공공기관',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM025',
+        '00000002',
+        '금융기관',
+        '금융기관',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM025',
+        '00000004',
+        '의료기관',
+        '의료기관',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM025',
+        '00000003',
+        '교육기관',
+        '교육기관',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM028',
+        '2',
+        '접수',
+        '접수',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM028',
+        '1',
+        '접수대기',
+        '접수대기',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM028',
+        '3',
+        '완료',
+        '완료',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM029',
+        'method',
+        'METHOD',
+        'METHOD',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM029',
+        'pointcut',
+        'POINTCUT',
+        'POINTCUT',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM029',
+        'url',
+        'URL',
+        'URL',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM033',
+        'C',
+        '생성',
+        '생성',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM033',
+        'D',
+        '삭제',
+        '삭제',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM033',
+        'R',
+        '조회',
+        '조회',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM033',
+        'U',
+        '수정',
+        '수정',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:38','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM101',
+        'BBST01',
+        '통합게시판',
+        '통합게시판',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:40','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:40','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM101',
+        'BBST02',
+        '블로그형게시판',
+        '블로그형게시판',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:40','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:40','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COM101',
+        'BBST03',
+        '방명록',
+        '방명록',
+        'Y',
+        STR_TO_DATE('2026-05-08 17:07:40','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM',
+        STR_TO_DATE('2026-05-08 17:07:40','%Y-%m-%d %H:%i:%s'),
+        'SYSTEM');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COUNSEL_TYPE',
+        '개발',
+        '개발',
+        '02_개발',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COUNSEL_TYPE',
+        '건설',
+        '건설',
+        '04_건설',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COUNSEL_TYPE',
+        '비축',
+        '비축',
+        '03_비축',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('COUNSEL_TYPE',
+        '일반',
+        '일반',
+        '01_일반',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_1',
+        '편집중',
+        '01_편집중',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_2',
+        '승인요청',
+        '02_승인요청',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_3',
+        '승인반려',
+        '03_승인반려',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_4',
+        '승인완료',
+        '04_승인완료',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_9',
+        '수정완료',
+        '09_수정완료',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_6',
+        '수정권한승인완료',
+        '06_수정권한승인완료',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_7',
+        '수정권한승인반려',
+        '07_수정권한승인반려',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_8',
+        '수정완료확인',
+        '08_수정완료확인',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('FT_STATUS',
+        'FT_STATUS_5',
+        '수정권한요청',
+        '05_수정권한요청',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_FILE',
+        'REL_FILE_1',
+        '관련파일',
+        '01_관련파일',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_FILE',
+        'REL_FILE_2',
+        '개정문파일',
+        '02_개정문파일',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_FILE',
+        'REL_FILE_3',
+        'PDF뷰어용파일',
+        '03_PDF뷰어용파일',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_FILE',
+        'REL_FILE_4',
+        '서식파일',
+        '04_서식파일',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('REL_LINK',
+        'REL_LINK_1',
+        '공통',
+        '01_공통',
+        'Y',
+        STR_TO_DATE('2026-07-09 12:54:09','%Y-%m-%d %H:%i:%s'),
+        'TBCODE_MIG',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('SGUBUN',
+        'FT_GUBUN_3',
+        '업무매뉴얼',
+        '03_업무매뉴얼',
+        'Y',
+        STR_TO_DATE('2026-07-10 17:45:29','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('SGUBUN',
+        'FT_GUBUN_1',
+        '법령',
+        '01_법령',
+        'Y',
+        STR_TO_DATE('2026-07-10 17:45:02','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        STR_TO_DATE('2026-07-31 14:32:56','%Y-%m-%d %H:%i:%s'),
+        'sysmen');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('SGUBUN',
+        'FT_GUBUN_5',
+        '규정문서',
+        '04_규정문서',
+        'Y',
+        STR_TO_DATE('2026-07-31 14:32:34','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('SGUBUN',
+        'FT_GUBUN_4',
+        '법무자료',
+        '04_법무자료',
+        'Y',
+        STR_TO_DATE('2026-07-27 14:13:08','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        STR_TO_DATE('2026-07-31 14:35:09','%Y-%m-%d %H:%i:%s'),
+        'sysmen');
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('SGUBUN',
+        'FT_GUBUN_2',
+        '사규',
+        '02_사규',
+        'Y',
+        STR_TO_DATE('2026-07-10 17:45:13','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('faqCode',
+        'FAQ99',
+        '기타',
+        '기타',
+        'Y',
+        STR_TO_DATE('2026-07-09 09:26:38','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        NULL,
+        NULL);
+INSERT INTO COMTCCMMNDETAILCODE (CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT, FRST_REGIST_PNTTM, FRST_REGISTER_ID, LAST_UPDT_PNTTM, LAST_UPDUSR_ID)
+VALUES ('faqCode',
+        'FAQ01',
+        '이용방법',
+        '이용방법',
+        'Y',
+        STR_TO_DATE('2026-07-09 09:25:29','%Y-%m-%d %H:%i:%s'),
+        'sysmen',
+        NULL,
+        NULL);
+
+COMMIT;

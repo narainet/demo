@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE form-validation PUBLIC
+    "-//Apache Software Foundation//DTD Commons Validator Rules Configuration 1.1//EN"
+    "http://jakarta.apache.org/commons/dtds/validator_1_1.dtd">
+
+<!--
+  댓글(cop/cmt) 검증 규칙.
+   - articleCommentVO : EgovArticleDetail.jsp 의 <validator:javascript formName="articleCommentVO"/> 가
+                        이 formset 을 읽어 validateArticleCommentVO() 스크립트를 생성한다.
+                        formset 이 없으면 함수가 만들어지지 않아 댓글 등록/수정 버튼이 JS 오류로 죽는다.
+   - comment          : 서버측 beanValidator.validate(comment, ...) 가 @ModelAttribute 이름으로 찾는 formset.
+  maxlength 300 = COMTNCOMMENT.ANSWER VARCHAR2(300 CHAR).
+-->
+<form-validation>
+
+    <formset>
+		<form name="articleCommentVO">
+			<field property="commentCn" depends="required, maxlength">
+        		<arg0 key="comCopCmt.articleCommentVO.commentCn" />
+        		<arg1 key="1000" resource="false"/>
+				<var>
+					<var-name>maxlength</var-name>
+					<var-value>1000</var-value>
+				</var>
+			</field>
+		</form>
+		<form name="comment">
+			<field property="commentCn" depends="required, maxlength">
+        		<arg0 key="comCopCmt.articleCommentVO.commentCn" />
+        		<arg1 key="1000" resource="false"/>
+				<var>
+					<var-name>maxlength</var-name>
+					<var-value>1000</var-value>
+				</var>
+			</field>
+		</form>
+    </formset>
+
+</form-validation>

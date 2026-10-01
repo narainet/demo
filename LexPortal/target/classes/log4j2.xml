@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xml>
+<Configuration>
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="[log4j]%d %5p [%c] %m%n" />
+        </Console>
+        <!-- SQL 전용 콘솔 — 짧은 포맷으로 가독성 ↑ -->
+        <Console name="sql" target="SYSTEM_OUT">
+            <PatternLayout pattern="[SQL] %d{HH:mm:ss.SSS} %m%n" />
+        </Console>
+        <!-- 앱 로그 파일화(2026-08-04) — Eclipse 콘솔 전용이던 quartz 오류 등을 파일로 남긴다.
+             INFO 이상만(각 AppenderRef 의 level 필터) — SQL TRACE/DEBUG 는 콘솔 전용 유지.
+             위치 = ${catalina.base}/logs = WTP tmpN\logs (JULI catalina 로그와 같은 폴더) -->
+        <RollingFile name="appfile" fileName="${sys:catalina.base}/logs/app.log"
+                     filePattern="${sys:catalina.base}/logs/app.%d{yyyy-MM-dd}.log">
+            <PatternLayout pattern="[log4j]%d %5p [%c] %m%n" />
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Logger name="java.sql" level="DEBUG" additivity="false">
+            <AppenderRef ref="console" />
+        </Logger>
+        <Logger name="egovframework" level="DEBUG" additivity="false">
+            <AppenderRef ref="console" />
+            <AppenderRef ref="appfile" level="INFO" />
+        </Logger>
+        <Logger name="org.egovframe" level="DEBUG" additivity="false">
+            <AppenderRef ref="console" />
+            <AppenderRef ref="appfile" level="INFO" />
+        </Logger>
+		<!-- log SQL with timing information, post execution -->
+	    <Logger name="jdbc.sqltiming" level="DEBUG" additivity="false">
+	        <AppenderRef ref="console" />
+	    </Logger>
+	    <Logger name="org.springframework" level="INFO" additivity="false">
+	        <AppenderRef ref="console" />
+	        <AppenderRef ref="appfile" level="INFO" />
+	    </Logger>
+
+        <!-- ── MyBatis SQL 로그 (실행 SQL + 파라미터 + 결과 행수) ────────
+             - org.mybatis (root) = WARN  (잡담 줄임)
+             - <namespace>.<method> level=TRACE → 그 매퍼 메서드의 SQL 만 정밀 로그
+               예) narainet.rlms.relexcl.mapper.RelExclLnkMapper 의 모든 메서드
+        -->
+        <Logger name="org.mybatis" level="WARN" additivity="false">
+            <AppenderRef ref="sql"/>
+        </Logger>
+        <Logger name="org.apache.ibatis" level="WARN" additivity="false">
+            <AppenderRef ref="sql"/>
+        </Logger>
+        <!-- 우리 매퍼 패키지 — 실행 SQL/파라미터/결과 모두 표시(콘솔). warn/error 는 파일에도 -->
+        <Logger name="narainet.rlms" level="TRACE" additivity="false">
+            <AppenderRef ref="sql"/>
+            <AppenderRef ref="appfile" level="INFO" />
+        </Logger>
+        <!-- jdbc 직접 (option) — 너무 시끄럽지만 정밀 진단 시 INFO/DEBUG 로 -->
+        <Logger name="jdbc.sqlonly" level="DEBUG" additivity="false">
+            <AppenderRef ref="sql"/>
+        </Logger>
+        <Logger name="jdbc.resultsettable" level="DEBUG" additivity="false">
+            <AppenderRef ref="sql"/>
+        </Logger>
+
+        <Root level="INFO">
+            <AppenderRef ref="console" />
+            <AppenderRef ref="appfile" level="INFO" />
+        </Root>
+    </Loggers>
+</Configuration>

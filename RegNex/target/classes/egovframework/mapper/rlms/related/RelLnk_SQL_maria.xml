@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelLnk_SQL_maria.xml
+
+  관련자료 — LINK 액션 자식(TB_REL_LNK) MyBatis 매핑.
+   - 모든 컬럼 NOT NULL → 빈값은 Service 에서 디폴트로 채워서 INSERT.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelLnkMapper">
+
+	<resultMap id="relLnkResult" type="narainet.rlms.related.service.RelLnkVO">
+		<result property="relLnkNo"  column="IRLINK_NO"/>
+		<result property="relVrsnNo" column="IRVRSN_NO"/>
+		<result property="cate"      column="SCATE"/>
+		<result property="title"     column="STITLE"/>
+		<result property="url"       column="SURL"/>
+		<result property="refNo"     column="IREF_NO"/>
+		<result property="refTable"  column="SREF_TABLE"/>
+		<result property="seq"       column="ISEQ"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="sysId"     column="SSYS_ID"/>
+	</resultMap>
+
+	<sql id="relLnkCols">
+		L.IRLINK_NO, L.IRVRSN_NO, L.SCATE, L.STITLE, L.SURL,
+		L.IREF_NO, L.SREF_TABLE, L.ISEQ, L.SINS_DT, L.SSYS_ID
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relLnkResult">
+		SELECT <include refid="relLnkCols"/>
+		  FROM TB_REL_LNK L
+		 WHERE L.IRVRSN_NO = #{relVrsnNo}
+		 ORDER BY L.ISEQ, L.IRLINK_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relLnkResult">
+		SELECT <include refid="relLnkCols"/>
+		  FROM TB_REL_LNK L
+		 WHERE L.IRLINK_NO = #{relLnkNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelLnkVO">
+		INSERT INTO TB_REL_LNK (
+			IRLINK_NO, IRVRSN_NO, SCATE, STITLE, SURL,
+			IREF_NO, SREF_TABLE, ISEQ, SINS_DT
+		) VALUES (
+			#{relLnkNo},
+			#{relVrsnNo},
+			#{cate,jdbcType=VARCHAR},
+			#{title,jdbcType=VARCHAR},
+			#{url,jdbcType=VARCHAR},
+			#{refNo,jdbcType=NUMERIC},
+			#{refTable,jdbcType=VARCHAR},
+			#{seq,jdbcType=NUMERIC},
+			#{insDt,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_LNK WHERE IRLINK_NO = #{relLnkNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_LNK WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+</mapper>

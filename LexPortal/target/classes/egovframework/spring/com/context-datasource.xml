@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans 
+	xmlns="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:util="http://www.springframework.org/schema/util" 
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd 
+	 						http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-4.0.xsd">
+
+	<bean id="egov.propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="locations">
+            <list>
+                <value>classpath:/egovframework/egovProps/globals.properties</value>
+                <!-- <value>file:/product/jeus/egovProps/globals.properties</value> -->
+            </list>
+        </property>
+    </bean>
+	
+	<!-- DataSource -->
+	<alias name="dataSource" alias="egov.dataSource" />
+	
+	<!--
+	  ★DB 접속정보 3항목은 globals.properties 에 모두 암호문으로 두고 여기서 복호한다 (2026-08-06).
+	    egovEnvCryptoService 는 기동 시 Globals.<DbType>.Url/UserName/Password 를 읽어 두므로
+	    (init() 이 활성 DbType 기준으로 로드) 각 프로파일에서 같은 표현식을 써도 제 값이 나온다.
+	    암호문 생성은 관리자 > 운영관리 > DB 접속정보 암호화 화면(/uss/ion/crypto/dbCryptoView.do).
+	    ⛔평문을 남기면 복호가 예외 없이 깨진 문자열을 돌려주므로 세 항목 모두 암호문이어야 한다.
+	-->
+
+	<!-- oracle -->
+	<beans profile="oracle">
+	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+		<property name="driverClassName" value="${Globals.oracle.DriverClassName}"/>
+		<property name="url" value="#{egovEnvCryptoService.getUrl()}" />
+		<property name="username" value="#{egovEnvCryptoService.getUsername()}"/>
+		<property name="password" value="#{egovEnvCryptoService.getPassword()}"/>
+	</bean>
+	</beans>
+
+	<!-- tibero -->
+	<beans profile="tibero">
+	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+		<property name="driverClassName" value="${Globals.tibero.DriverClassName}"/>
+		<property name="url" value="#{egovEnvCryptoService.getUrl()}" />
+		<property name="username" value="#{egovEnvCryptoService.getUsername()}"/>
+		<property name="password" value="#{egovEnvCryptoService.getPassword()}"/>
+	</bean>
+	</beans>
+
+
+	<!-- PostgreSQL -->
+	<beans profile="postgres">
+	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+		<property name="driverClassName" value="${Globals.postgres.DriverClassName}"/>
+		<property name="url" value="#{egovEnvCryptoService.getUrl()}" />
+		<property name="username" value="#{egovEnvCryptoService.getUsername()}"/>
+		<property name="password" value="#{egovEnvCryptoService.getPassword()}"/>
+		<!-- Oracle 파리티는 URL 의 stringtype=unspecified 가 담당(문자열 바인드 → 서버 타입 추론).
+		     PG 는 standard_conforming_strings 기본이라 maria 류 세션 플래그 불요. -->
+	</bean>
+	</beans>
+
+	<!-- MariaDB -->
+	<beans profile="maria">
+	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+		<property name="driverClassName" value="${Globals.maria.DriverClassName}"/>
+		<property name="url" value="#{egovEnvCryptoService.getUrl()}" />
+		<property name="username" value="#{egovEnvCryptoService.getUsername()}"/>
+		<property name="password" value="#{egovEnvCryptoService.getPassword()}"/>
+		<!-- Oracle 파리티 2종: 기본 sql_mode 에선 || 가 OR 로 해석(문자열연결이 0/1 반환)되고,
+		     문자열 리터럴의 백슬래시가 이스케이프로 해석돼 인가 정규식('\A...')이 훼손된다.
+		     기존 모드를 유지한 채 두 플래그만 덧붙인다(통째 대체 금지). -->
+		<property name="connectionInitSqls">
+			<list>
+				<value>SET SESSION sql_mode=CONCAT(@@sql_mode,',PIPES_AS_CONCAT,NO_BACKSLASH_ESCAPES')</value>
+			</list>
+		</property>
+	</bean>
+	</beans>
+
+	
+
+    <!-- DB Pool이 생성이 되더라고 특정 시간 호출되지 않으면 DBMS 설정에 따라 연결을 끊어질 때
+		이 경우 DBCP를 사용하셨다면.. 다음과 같은 설정을 추가하시면 연결을 유지시켜 줍니다. -->
+	<!--
+	<property name="validationQuery" value="select 1 from dual" />
+	<property name="testWhileIdle" value="true" />
+	<property name="timeBetweenEvictionRunsMillis" value="60000" /> -->  <!-- 1분 -->
+
+	<!-- DBCP가 아닌 WAS의 DataSource를 사용하시는 경우도 WAS별로 동일한 설정을 하실 수 있습니다.
+		(WAS별 구체적인 설정은 WAS document 확인) -->
+</beans>

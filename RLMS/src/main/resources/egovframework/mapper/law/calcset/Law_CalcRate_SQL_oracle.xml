@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/calcset/Law_CalcRate_SQL_oracle.xml
+  계산기 요율(LAW_CALC_RATE) — 기준일 유효 세트(계산기) + 세트 편집(요율설정). §7.4·§7.13
+-->
+<mapper namespace="narainet.law.calcset.mapper.LawCalcRateMapper">
+
+	<!--
+	  기준일 유효 요율: 타입별 EFF_DT = (APPLY_DT ≤ 기준일 중 최대), 없으면 최초 APPLY_DT 폴백(계산기 미동작 방지).
+	  해당 EFF_DT 세트의 행들만 반환. 공식 뼈대는 JS, 여기선 숫자만.
+	-->
+	<select id="selectEffectiveRates" resultType="narainet.law.calcset.service.LawCalcRateVO">
+		SELECT r.CALC_TYPE   AS calcType,
+		       r.ITEM_CD     AS itemCd,
+		       r.APPLY_DT    AS applyDt,
+		       r.SECTION_AMT AS sectionAmt,
+		       r.RATE_VAL    AS rateVal,
+		       r.ADD_AMT     AS addAmt,
+		       r.RMK         AS rmk
+		  FROM LAW_CALC_RATE r
+		  JOIN (
+		        SELECT CALC_TYPE,
+		               NVL(MAX(CASE WHEN APPLY_DT <![CDATA[<=]]> #{baseDt} THEN APPLY_DT END), MIN(APPLY_DT)) EFF_DT
+		          FROM LAW_CALC_RATE
+		         WHERE USE_YN = 'Y'
+		         GROUP BY CALC_TYPE
+		       ) eff ON eff.CALC_TYPE = r.CALC_TYPE AND r.APPLY_DT = eff.EFF_DT
+		 WHERE r.USE_YN = 'Y'
+		 ORDER BY r.CALC_TYPE, NVL(r.SECTION_AMT, -1), r.ITEM_CD
+	</select>
+
+	<sql id="typeIn">
+		AND CALC_TYPE IN
+		<foreach collection="calcTypes" item="ct" open="(" separator="," close=")">#{ct}</foreach>
+	</sql>
+
+	<select id="selectSetDates" resultType="map">
+		SELECT APPLY_DT AS "applyDt", COUNT(*) AS "cnt"
+		  FROM LAW_CALC_RATE
+		 WHERE USE_YN = 'Y'
+		<include refid="typeIn"/>
+		 GROUP BY APPLY_DT
+		 ORDER BY APPLY_DT DESC
+	</select>
+
+	<select id="selectSetRows" resultType="narainet.law.calcset.service.LawCalcRateVO">
+		SELECT RATE_ID     AS rateId,
+		       CALC_TYPE   AS calcType,
+		       ITEM_CD     AS itemCd,
+		       APPLY_DT    AS applyDt,
+		       SECTION_AMT AS sectionAmt,
+		       RATE_VAL    AS rateVal,
+		       ADD_AMT     AS addAmt,
+		       RMK         AS rmk,
+		       USE_YN      AS useYn
+		  FROM LAW_CALC_RATE
+		 WHERE USE_YN = 'Y'
+		   AND APPLY_DT = #{applyDt}
+		<include refid="typeIn"/>
+		 ORDER BY CALC_TYPE, NVL(SECTION_AMT, -1), ITEM_CD
+	</select>
+
+	<select id="selectLatestApplyDt" resultType="string">
+		SELECT MAX(APPLY_DT)
+		  FROM LAW_CALC_RATE
+		 WHERE USE_YN = 'Y'
+		<include refid="typeIn"/>
+	</select>
+
+	<insert id="insertRate" parameterType="narainet.law.calcset.service.LawCalcRateVO">
+		INSERT INTO LAW_CALC_RATE (
+			RATE_ID, CALC_TYPE, ITEM_CD, APPLY_DT, SECTION_AMT, RATE_VAL, ADD_AMT, RMK, USE_YN, REG_USER_ID, REG_DT
+		) VALUES (
+			#{rateId}, #{calcType}, #{itemCd, jdbcType=VARCHAR}, #{applyDt},
+			#{sectionAmt, jdbcType=NUMERIC}, #{rateVal, jdbcType=NUMERIC}, #{addAmt, jdbcType=NUMERIC},
+			#{rmk, jdbcType=VARCHAR}, 'Y', #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<delete id="deleteSetPhysical">
+		DELETE FROM LAW_CALC_RATE
+		 WHERE APPLY_DT = #{applyDt}
+		<include refid="typeIn"/>
+	</delete>
+
+	<update id="softDeleteSet">
+		UPDATE LAW_CALC_RATE
+		   SET USE_YN = 'N',
+		       UPD_DT = TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+		 WHERE APPLY_DT = #{applyDt}
+		<include refid="typeIn"/>
+	</update>
+
+</mapper>

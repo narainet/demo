@@ -1,0 +1,15 @@
+<%-- 통합검색 행: FAQ (searchAll.jsp 전용 static include — 변수 row).
+     딥링크 = 사용자 FAQ 목록(selectFaqUserList.do) 질문제목 필터 착지 — 아코디언에 개별 앵커가 없어 제목 검색으로 좁혀 보냄. --%>
+<%@ page pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<div class="us-item">
+  <div class="t">
+    <span class="us-kind">FAQ<c:if test="${not empty row.cateNm}"> · <c:out value="${row.cateNm}"/></c:if></span>
+    <c:url var="faqUrl" value="/uss/olh/faq/selectFaqUserList.do"><c:param name="searchCnd" value="0"/><c:param name="searchWrd" value="${row.title}"/></c:url>
+    <a href="${faqUrl}"><c:out value="${row.title}"/></a>
+  </div>
+  <c:if test="${not empty row.snippet}">
+    <div class="snip"><c:out value="${row.snippet}"/>&#8230;</div>
+  </c:if>
+  <div class="meta"><c:out value="${row.regDate}"/></div>
+</div>

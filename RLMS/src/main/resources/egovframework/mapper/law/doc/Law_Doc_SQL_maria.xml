@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/doc/Law_Doc_SQL_maria.xml
+  소송문서(LAW_SUIT_DOC) — 조회 목록(사건 조인)·ZIP 일괄용 첨부ID·사건별 목록·승인 워크플로. §7.2
+-->
+<mapper namespace="narainet.law.doc.mapper.LawDocMapper">
+
+	<sql id="docCols">
+		D.DOC_ID       AS docId,
+		D.SUIT_ID      AS suitId,
+		D.DOC_KIND_CD  AS docKindCd,
+		DK.CODE_NM     AS docKindNm,
+		D.DOC_TITL     AS docTitl,
+		D.DOC_MEMO     AS docMemo,
+		D.ATCH_FILE_ID AS atchFileId,
+		D.APP_STS_CD   AS appStsCd,
+		AP.CODE_NM     AS appStsNm,
+		D.APP_USER_ID  AS appUserId,
+		D.APP_USER_NM  AS appUserNm,
+		D.APP_DT       AS appDt,
+		D.APP_OPINION  AS appOpinion,
+		D.REG_USER_ID  AS regUserId,
+		RU.USER_NM     AS regUserNm,
+		D.REG_DT       AS regDt,
+		S.COURT_NM     AS courtNm,
+		S.CASE_NO      AS caseNo,
+		S.CASE_NM      AS caseNm
+	</sql>
+
+	<sql id="docFrom">
+		FROM LAW_SUIT_DOC D
+		JOIN LAW_SUIT S ON S.SUIT_ID = D.SUIT_ID AND S.DEL_YN = 'N'
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE DK ON DK.CODE_ID = 'LAW_DOC_KIND' AND DK.CODE = D.DOC_KIND_CD
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE AP ON AP.CODE_ID = 'LAW_DOC_APP_STATUS' AND AP.CODE = D.APP_STS_CD
+		LEFT OUTER JOIN COMTNEMPLYRINFO RU ON RU.EMPLYR_ID = D.REG_USER_ID
+	</sql>
+
+	<sql id="searchWhere">
+		<if test='searchFrFrom != null and searchFrFrom != ""'>
+		  AND S.FR_DT <![CDATA[>=]]> #{searchFrFrom}
+		</if>
+		<if test='searchFrTo != null and searchFrTo != ""'>
+		  AND S.FR_DT <![CDATA[<=]]> #{searchFrTo}
+		</if>
+		<if test='searchItpt != null and searchItpt != ""'>
+		  AND S.ITPT_KIND_CD = #{searchItpt}
+		</if>
+		<if test='searchCaseKind != null and searchCaseKind != ""'>
+		  AND S.CASE_KIND_CD = #{searchCaseKind}
+		</if>
+		<if test='searchRslt != null and searchRslt != ""'>
+		  AND S.RSLT_KIND_CD = #{searchRslt}
+		</if>
+		<if test='searchCaseYear != null and searchCaseYear != ""'>
+		  AND S.CASE_YEAR = #{searchCaseYear}
+		</if>
+		<if test='searchCaseSign != null and searchCaseSign != ""'>
+		  AND S.CASE_SIGN_CD = #{searchCaseSign}
+		</if>
+		<if test='searchCaseSerial != null and searchCaseSerial != ""'>
+		  AND S.CASE_SERIAL LIKE '%' || #{searchCaseSerial} || '%'
+		</if>
+		<if test='searchDocKinds != null and searchDocKinds.size() > 0'>
+		  AND D.DOC_KIND_CD IN
+		  <foreach collection="searchDocKinds" item="dk" open="(" separator="," close=")">#{dk}</foreach>
+		</if>
+	</sql>
+
+	<select id="selectDocCnt" parameterType="narainet.law.doc.service.LawSuitDocVO" resultType="int">
+		SELECT COUNT(*)
+		<include refid="docFrom"/>
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectDocList" parameterType="narainet.law.doc.service.LawSuitDocVO"
+	        resultType="narainet.law.doc.service.LawSuitDocVO">
+		SELECT <include refid="docCols"/>
+		                <include refid="docFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="searchWhere"/>
+		                 ORDER BY D.DOC_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="selectDocAtchFileIds" parameterType="narainet.law.doc.service.LawSuitDocVO" resultType="string">
+		SELECT DISTINCT D.ATCH_FILE_ID
+		<include refid="docFrom"/>
+		 WHERE D.ATCH_FILE_ID IS NOT NULL
+		   AND TRIM(D.ATCH_FILE_ID) IS NOT NULL
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectDocListBySuit" resultType="narainet.law.doc.service.LawSuitDocVO">
+		SELECT <include refid="docCols"/>
+		<include refid="docFrom"/>
+		 WHERE D.SUIT_ID = #{suitId}
+		 ORDER BY D.DOC_ID DESC
+	</select>
+
+	<select id="selectDoc" resultType="narainet.law.doc.service.LawSuitDocVO">
+		SELECT <include refid="docCols"/>
+		<include refid="docFrom"/>
+		 WHERE D.DOC_ID = #{docId}
+	</select>
+
+	<insert id="insertDoc" parameterType="narainet.law.doc.service.LawSuitDocVO">
+		INSERT INTO LAW_SUIT_DOC (
+			DOC_ID, SUIT_ID, DOC_KIND_CD, DOC_TITL, DOC_MEMO, ATCH_FILE_ID,
+			APP_STS_CD, REG_USER_ID, REG_DT
+		) VALUES (
+			#{docId}, #{suitId}, #{docKindCd, jdbcType=VARCHAR}, #{docTitl, jdbcType=VARCHAR},
+			#{docMemo, jdbcType=VARCHAR}, #{atchFileId, jdbcType=CHAR},
+			'S001', #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateDoc" parameterType="narainet.law.doc.service.LawSuitDocVO">
+		UPDATE LAW_SUIT_DOC
+		   SET DOC_KIND_CD  = #{docKindCd, jdbcType=VARCHAR},
+		       DOC_TITL     = #{docTitl, jdbcType=VARCHAR},
+		       DOC_MEMO     = #{docMemo, jdbcType=VARCHAR},
+		       ATCH_FILE_ID = #{atchFileId, jdbcType=CHAR},
+		       APP_STS_CD   = 'S001',
+		       APP_USER_ID  = NULL,
+		       APP_USER_NM  = NULL,
+		       APP_DT       = NULL,
+		       APP_OPINION  = NULL,
+		       UPD_USER_ID  = #{updUserId},
+		       UPD_DT       = #{updDt}
+		 WHERE DOC_ID = #{docId}
+	</update>
+
+	<delete id="deleteDoc">
+		DELETE FROM LAW_SUIT_DOC WHERE DOC_ID = #{docId}
+	</delete>
+
+	<!-- ── 승인 워크플로 ─────────────────────────────────── -->
+	<sql id="approvalTabWhere">
+		<choose>
+			<when test='searchAppSts == "S002"'> AND D.APP_STS_CD = 'S002' </when>
+			<when test='searchAppSts == "S003"'> AND D.APP_STS_CD = 'S003' </when>
+			<when test='searchAppSts == "DONE"'> AND D.APP_STS_CD IN ('S002','S003') </when>
+			<otherwise> AND D.APP_STS_CD = 'S001' </otherwise>
+		</choose>
+	</sql>
+
+	<select id="selectApprovalCnt" parameterType="narainet.law.doc.service.LawSuitDocVO" resultType="int">
+		SELECT COUNT(*)
+		<include refid="docFrom"/>
+		 WHERE 1 = 1
+		<include refid="approvalTabWhere"/>
+	</select>
+
+	<select id="selectApprovalList" parameterType="narainet.law.doc.service.LawSuitDocVO"
+	        resultType="narainet.law.doc.service.LawSuitDocVO">
+		SELECT <include refid="docCols"/>
+		                <include refid="docFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="approvalTabWhere"/>
+		                 ORDER BY D.DOC_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<update id="updateApproval" parameterType="narainet.law.doc.service.LawSuitDocVO">
+		UPDATE LAW_SUIT_DOC
+		   SET APP_STS_CD  = #{appStsCd},
+		       APP_USER_ID = #{appUserId},
+		       APP_USER_NM = #{appUserNm, jdbcType=VARCHAR},
+		       APP_DT      = TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS'),
+		       APP_OPINION = #{appOpinion, jdbcType=VARCHAR}
+		 WHERE DOC_ID = #{docId}
+	</update>
+
+</mapper>

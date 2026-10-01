@@ -1,0 +1,16 @@
+<%-- 통합검색 행: 게시판 글 (searchAll.jsp 전용 static include — 변수 row) --%>
+<%@ page pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<div class="us-item">
+  <div class="t">
+    <span class="us-kind"><c:out value="${row.bbsNm}"/></span>
+    <a href="<c:url value='/cop/bbs/user/selectArticleDetail.do'/>?nttId=${row.nttId}&amp;bbsId=<c:out value='${row.bbsId}'/>"><c:out value="${row.title}"/></a>
+  </div>
+  <c:if test="${not empty row.snippet}">
+    <div class="snip"><c:out value="${row.snippet}"/>&#8230;</div>
+  </c:if>
+  <div class="meta">
+    <c:if test="${not empty row.regNm}"><c:out value="${row.regNm}"/> · </c:if>
+    <c:out value="${row.regDate}"/>
+  </div>
+</div>

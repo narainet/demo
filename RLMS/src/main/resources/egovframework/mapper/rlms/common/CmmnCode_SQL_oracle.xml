@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로:
+    /src/main/resources/egovframework/mapper/rlms/common/CmmnCode_SQL_oracle.xml
+
+  eGov 표준 공통코드(ccm) 단순 조회. 레거시 TB_CODE 는 사용 중단(2026-07-09).
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.common.mapper.CmmnCodeMapper">
+
+	<!--
+	  CODE_ID(그룹) 에 속한 상세 코드 목록.
+	  파라미터 codeId: 'SGUBUN' / 'COM101' 등.
+	  반환: code (상세코드값) / codeNm (라벨) / codeDc (설명·정렬키)
+	-->
+	<select id="selectCmmnCodeList" resultType="map">
+		SELECT CODE       AS "code",
+		       CODE_NM    AS "codeNm",
+		       CODE_DC    AS "codeDc"
+		  FROM COMTCCMMNDETAILCODE
+		 WHERE CODE_ID = #{codeId}
+		   AND USE_AT  = 'Y'
+		 ORDER BY CODE_DC, CODE
+	</select>
+
+	<!-- 전체 상세(USE_AT 무관, useAt 포함) — 분류관리 트리(숨김 구분도 표시=복구 입구)와
+	     트리 빌더의 숨김 구분 판정용. 일반 소비(라벨/체크박스)는 위 selectCmmnCodeList(USE_AT='Y'). -->
+	<select id="selectCmmnCodeListAll" resultType="map">
+		SELECT CODE            AS "code",
+		       CODE_NM         AS "codeNm",
+		       CODE_DC         AS "codeDc",
+		       NVL(USE_AT,'Y') AS "useAt"
+		  FROM COMTCCMMNDETAILCODE
+		 WHERE CODE_ID = #{codeId}
+		 ORDER BY CODE_DC, CODE
+	</select>
+
+</mapper>

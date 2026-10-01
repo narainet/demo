@@ -1,0 +1,64 @@
+<%--
+  물리적 저장 경로: /src/main/webapp/WEB-INF/jsp/law/requser/reqStep.jspf
+  소송의뢰 진행 단계 표시 — KRDS "단계 표시" 컴포넌트(krds-step-wrap) 정본 마크업.
+    참고: https://www.krds.go.kr/html/site/component/component_07_01.html
+      · ol/li + 현재 단계에 aria-current, 단계 수는 3~7개 권고 → 의뢰 흐름을 3단계로 압축
+      · 마크업 규격: li > span(원형 표식) > .step(단계번호) + .step-tit(제목)  ※ span 이 flex-column
+      · 상태(LAW_REQ_STATUS)는 3단계 "라벨"로 흡수 — S002 승인 완료 / S003 반려 / 그 외 처리 완료
+        (반려는 별도 단계가 아니라 종결 결과라 단계를 늘리지 않는다)
+  정적 include 라 부모 페이지 스코프를 그대로 쓴다. 부모가 include 전에 두 값을 c:set 할 것:
+    reqStepCur    : 1 = 신청서 작성(등록/수정 폼) · 2 = 접수(법무팀 검토 대기) · 3 = 처리 완료
+    reqStepStatus : req.statusCd (없으면 빈 값 — 3단계 라벨이 '처리 완료' 로 남는다)
+--%>
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<style>
+  .law-req-step { margin: 2px 0 24px; }
+  /* 스크린리더 전용 보조 텍스트 — 공용 sr-only 클래스가 없어 이 컴포넌트 안에서만 정의 */
+  .law-req-step .sr-txt { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+                          overflow: hidden; clip: rect(0 0 0 0); border: 0; white-space: nowrap; }
+  /* 반려는 '완료'가 아니라 종결이라 현재 단계 표식만 경고색으로 (KRDS 토큰 위 최소 덮어쓰기) */
+  .law-req-step.is-reject > li.active > span::before { border-color: #c5303a; }
+  .law-req-step.is-reject > li.active > span::after  { background-color: #c5303a; }
+  .law-req-step.is-reject > li.active .step-tit      { color: #c5303a; }
+  /* KRDS 기본은 li 균등분할이라 마지막 1/n 이 빈 채로 남는다 → 마지막 단계를 오른쪽 끝에 붙여 전체 폭 사용.
+     원형 표식·라벨을 우측 기준으로 뒤집고, 직전 연결선이 표식까지 닿도록 마지막 li 의 선을 살린다. */
+  .law-req-step > li:last-child { flex: 0 0 auto; }
+  .law-req-step > li:last-child > span { padding-right: 0; text-align: right; }
+  .law-req-step > li:last-child > span::before { left: auto; right: 0; }
+  .law-req-step > li:last-child.done > span::after { left: auto; right: 0; }
+  .law-req-step > li:last-child.active > span::after {
+    left: auto;
+    right: calc((var(--krds-step--circle-size-default) - var(--krds-step--circle-size-active)) / 2);
+  }
+  .law-req-step > li:last-child::after { display: block; }
+  /* 마지막 li 의 선은 '직전 구간'의 연장 — 3단계 활성(=2단계 done) 때 색을 이어 맞춘다 */
+  .law-req-step > li:last-child.active::after { background-color: var(--krds-step--color-fill-done); }
+</style>
+<c:set var="s1cls" value="${reqStepCur gt 1 ? 'done' : 'active'}"/>
+<c:set var="s2cls" value="${reqStepCur gt 2 ? 'done' : (reqStepCur eq 2 ? 'active' : '')}"/>
+<c:set var="s3cls" value="${reqStepCur eq 3 ? 'active' : ''}"/>
+<c:set var="s3tit" value="${reqStepStatus eq 'S002' ? '승인 완료' : (reqStepStatus eq 'S003' ? '반려' : '처리 완료')}"/>
+<ol class="krds-step-wrap law-req-step${reqStepStatus eq 'S003' ? ' is-reject' : ''}" aria-label="소송의뢰 진행 단계 (전체 3단계)">
+  <li class="${s1cls}" aria-current="${s1cls eq 'active' ? 'true' : 'false'}">
+    <span>
+      <em class="step">1단계</em>
+      <strong class="step-tit">의뢰 작성</strong>
+      <span class="sr-txt">${s1cls eq 'done' ? '완료' : '현재 단계'}</span>
+    </span>
+  </li>
+  <li class="${s2cls}" aria-current="${s2cls eq 'active' ? 'true' : 'false'}">
+    <span>
+      <em class="step">2단계</em>
+      <strong class="step-tit">법무팀 검토</strong>
+      <span class="sr-txt">${s2cls eq 'done' ? '완료' : (s2cls eq 'active' ? '현재 단계' : '예정')}</span>
+    </span>
+  </li>
+  <li class="${s3cls}" aria-current="${s3cls eq 'active' ? 'true' : 'false'}">
+    <span>
+      <em class="step">3단계</em>
+      <strong class="step-tit"><c:out value="${s3tit}"/></strong>
+      <span class="sr-txt">${s3cls eq 'active' ? '현재 단계' : '예정'}</span>
+    </span>
+  </li>
+</ol>

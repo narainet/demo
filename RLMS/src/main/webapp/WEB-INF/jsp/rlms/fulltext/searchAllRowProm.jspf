@@ -1,0 +1,24 @@
+<%-- 통합검색 행: 규정 (searchAll.jsp 전용 static include — 변수 row)
+     taglib 선언은 IDE(JSP 검증기) 단독검사용 — 부모와 동일 선언이라 병합 시 무해(중복 taglib 허용) --%>
+<%@ page pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
+<c:set var="usExtUrl" value="${fn:toLowerCase(row.url)}"/>
+<div class="us-item">
+  <div class="t">
+    <c:choose>
+      <c:when test="${not empty row.url and (fn:startsWith(usExtUrl,'http://') or fn:startsWith(usExtUrl,'https://'))}">
+        <a href="${row.url}" target="_blank" rel="noopener"><c:out value="${row.title}"/></a> <span class="us-ext">원문보기&#8599;</span>
+      </c:when>
+      <c:otherwise>
+        <a href="<c:url value='/rlms/fulltext/provisionList.do'/>?promNo=${row.promNo}"><c:out value="${row.title}"/></a>
+      </c:otherwise>
+    </c:choose>
+    <c:if test="${row.pendingYn eq 'Y'}"><span class="krds-badge bg-light-information" title="시행일 ${row.startDate}">시행예정</span></c:if>
+  </div>
+  <div class="meta">
+    <c:if test="${not empty row.cateNm}"><c:out value="${row.cateNm}"/> · </c:if>
+    <c:if test="${not empty row.buseoNm}"><c:out value="${row.buseoNm}"/> · </c:if>
+    개정 <c:out value="${row.promDate}"/>
+  </div>
+</div>

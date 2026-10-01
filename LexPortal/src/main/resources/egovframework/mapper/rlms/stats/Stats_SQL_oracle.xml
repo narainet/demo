@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/stats/Stats_SQL_oracle.xml
+
+  통계/로그 — 레거시 statistic_* 이관. 실DB 이관 데이터 위 읽기전용 집계.
+   · TB_ACT_LOG       (STASK/SUSER_*/SINS_DT='YYYY-MM-DD HH:MI:SS'/SINS_IP)  사용자 활동 로그
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.stats.mapper.StatsMapper">
+
+	<resultMap id="statsResult" type="narainet.rlms.stats.service.StatsVO">
+		<result property="label"    column="LABEL"/>
+		<result property="cnt"      column="CNT"/>
+		<result property="lawId"    column="LAW_ID"/>
+		<result property="cateNm"   column="CATE_NM"/>
+		<result property="deptNm"   column="DEPT_NM"/>
+		<result property="bbsId"    column="BBS_ID"/>
+		<result property="nttId"    column="NTT_ID"/>
+		<result property="bbsNm"    column="BBS_NM"/>
+		<result property="useAt"    column="USE_AT"/>
+		<result property="task"     column="STASK"/>
+		<result property="userId"   column="SUSER_ID"/>
+		<result property="userName" column="SUSER_NAME"/>
+		<result property="refTable" column="SREF_TABLE"/>
+		<result property="refName"  column="SNAME"/>
+		<result property="insDt"    column="SINS_DT"/>
+		<result property="insIp"    column="SINS_IP"/>
+	</resultMap>
+
+	<!-- 게시판 뷰 카운트 적재 — 사용자 게시글 상세 GET 실열람 1회=1행. 채번=COMTECOPSEQ 'STATS_BBS_VIEW_NO' -->
+	<insert id="insertBbsViewStat">
+		INSERT INTO TB_STATS_BBS_VIEW (ISBVIEW_NO, SBBS_ID, INTT_ID, ICNT, SINS_DT)
+		VALUES (#{id}, #{bbsId}, #{nttId}, 1, TO_CHAR(SYSDATE, 'YYYY-MM-DD'))
+	</insert>
+
+	<!-- 게시판 조회통계 — 게시글별 기간 집계 상위 200. SBBS_ID 는 RTRIM 저장이라 CHAR 패딩 무해화 조인 -->
+	<select id="selectBbsViewStats" resultMap="statsResult">
+		SELECT * FROM (
+			SELECT v.SBBS_ID AS BBS_ID, v.INTT_ID AS NTT_ID,
+			       NVL(MAX(m.BBS_NM), '(삭제 게시판)') AS BBS_NM,
+			       NVL(MAX(b.NTT_SJ), '(삭제글)') AS LABEL,
+			       MAX(b.USE_AT) AS USE_AT, SUM(v.ICNT) AS CNT
+			  FROM TB_STATS_BBS_VIEW v
+			  LEFT JOIN COMTNBBS b ON b.NTT_ID = v.INTT_ID AND RTRIM(b.BBS_ID) = v.SBBS_ID
+			  LEFT JOIN COMTNBBSMASTER m ON RTRIM(m.BBS_ID) = v.SBBS_ID
+			 WHERE v.SINS_DT BETWEEN #{vo.fromDt} AND #{vo.toDt}
+			 GROUP BY v.SBBS_ID, v.INTT_ID
+			 ORDER BY CNT DESC, BBS_ID, NTT_ID
+		) WHERE ROWNUM &lt;= 200
+	</select>
+
+		<!-- 접속통계(accessWhere/accessDimExpr/selectAccessStats/selectAccessTotals)는
+	     표준 웹로그 매퍼(EgovWebLog_SQL_*.xml, namespace WebLog)로 이관 — 2026-08-06 -->
+
+	<!-- 사용자 활동 로그 — 기간(일자부분)/작업/사용자 필터 + 페이징 -->
+	<!-- 사용자 활동 로그 적재 — 로그인/규정 열람/파일 다운로드/통합검색 (적재 실패는 서비스가 삼켜 본 흐름 보호).
+	     SSYS_ID 는 단일 시스템 정책상 미기록(NULL). SINS_DT 는 화면 WHERE 의 SUBSTR(,1,10) 과 맞춘 문자열 포맷.
+	     신규 DB 는 SINS_IP/SSYS_ID 외 전 컬럼 NOT NULL — 대상 없는 액션(로그인 등)은 '-'/0 으로 흡수(promwork 선례) -->
+	<insert id="insertActLog">
+		INSERT INTO TB_ACT_LOG (IALOG_NO, STASK, SREF_TABLE, IREF_NO, SNAME, SUSER_ID, SUSER_NAME, SINS_DT, SINS_IP)
+		VALUES (#{id}, #{task},
+		        NVL(#{refTable,jdbcType=VARCHAR}, '-'), NVL(#{refNo,jdbcType=NUMERIC}, 0),
+		        NVL(#{name,jdbcType=VARCHAR}, '-'),
+		        NVL(#{userId,jdbcType=VARCHAR}, '-'),
+		        NVL(#{userNm,jdbcType=VARCHAR}, NVL(#{userId,jdbcType=VARCHAR}, '-')),
+		        TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'), #{ip,jdbcType=VARCHAR})
+	</insert>
+
+	<sql id="actLogWhere">
+		WHERE SUBSTR(a.SINS_DT, 1, 10) BETWEEN #{vo.fromDt} AND #{vo.toDt}
+		<if test="vo.searchTask != null and vo.searchTask != ''">
+			AND a.STASK = #{vo.searchTask}
+		</if>
+		<if test="vo.searchUser != null and vo.searchUser != ''">
+			AND UPPER(a.SUSER_NAME) LIKE '%' || UPPER(#{vo.searchUser}) || '%'
+		</if>
+	</sql>
+
+	<select id="selectActionLog" resultMap="statsResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			<!-- 표시는 분까지만(2026-07-31). 기간 WHERE 는 원본 컬럼의 SUBSTR(,1,10) 을 그대로 쓴다. -->
+			SELECT a.STASK, a.SUSER_ID, a.SUSER_NAME, a.SREF_TABLE, a.SNAME, SUBSTR(a.SINS_DT, 1, 16) AS SINS_DT, a.SINS_IP
+			  FROM TB_ACT_LOG a
+			<include refid="actLogWhere"/>
+			 ORDER BY a.IALOG_NO DESC
+		) TB ) WHERE rn BETWEEN #{vo.firstIndex}+1 AND #{vo.firstIndex}+#{vo.recordCountPerPage}
+	</select>
+
+	<select id="selectActionLogCnt" resultType="int">
+		SELECT COUNT(*) FROM TB_ACT_LOG a
+		<include refid="actLogWhere"/>
+	</select>
+
+	<select id="selectTaskKinds" resultType="string">
+		SELECT STASK FROM (
+			SELECT STASK, COUNT(*) C FROM TB_ACT_LOG
+			 WHERE STASK IS NOT NULL GROUP BY STASK ORDER BY C DESC
+		) WHERE ROWNUM &lt;= 20
+	</select>
+
+</mapper>

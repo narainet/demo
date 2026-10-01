@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/schedule/Law_Schedule_SQL_postgres.xml
+  일정(기일=LAW_SUIT_PROG PROG_KIND_CD='S001') — 사건·기일구분·상태 조인 + 수행자/보조(LAW_SUIT_STAFF 0/1). §7.5
+-->
+<mapper namespace="narainet.law.schedule.mapper.LawScheduleMapper">
+
+	<sql id="hearingCols">
+		G.PROG_ID      AS progId,
+		G.SUIT_ID      AS suitId,
+		G.DYPR_KIND_CD AS dyprKindCd,
+		DK.CODE_NM     AS dyprKindNm,
+		G.PROG_DT      AS progDt,
+		G.PROG_TM      AS progTm,
+		G.PLACE        AS place,
+		G.RESULT_DESC  AS resultDesc,
+		G.STAT_CD      AS statCd,
+		ST.CODE_NM     AS statNm,
+		S.CASE_NO      AS caseNo,
+		S.CASE_NM      AS caseNm,
+		S.COURT_NM     AS courtNm,
+		S.INSTANCE_CD  AS instanceCd,
+		IC.CODE_NM     AS instanceNm,
+		STF.STAFF_NM   AS staffNm,
+		STF.HELPER_NM  AS helperNm
+	</sql>
+
+	<sql id="hearingFrom">
+		FROM LAW_SUIT_PROG G
+		JOIN LAW_SUIT S ON S.SUIT_ID = G.SUIT_ID AND S.DEL_YN = 'N'
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE DK ON DK.CODE_ID = 'LAW_DYPR_KIND' AND DK.CODE = G.DYPR_KIND_CD
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE ST ON ST.CODE_ID = 'LAW_PROG_STAT' AND ST.CODE = G.STAT_CD
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE IC ON IC.CODE_ID = 'LAW_INSTANCE'  AND IC.CODE = S.INSTANCE_CD
+		LEFT OUTER JOIN (
+		      SELECT SUIT_ID,
+		             MAX(CASE WHEN SORT_ORDR = 0 THEN STAFF_NM END) STAFF_NM,
+		             MAX(CASE WHEN SORT_ORDR = 1 THEN STAFF_NM END) HELPER_NM
+		        FROM LAW_SUIT_STAFF
+		       GROUP BY SUIT_ID
+		     ) STF ON STF.SUIT_ID = G.SUIT_ID
+	</sql>
+
+	<select id="selectHearings" parameterType="narainet.law.schedule.service.LawScheduleVO"
+	        resultType="narainet.law.schedule.service.LawScheduleVO">
+		SELECT <include refid="hearingCols"/>
+		<include refid="hearingFrom"/>
+		 WHERE G.PROG_KIND_CD = 'S001'
+		<if test='targetDt != null and targetDt != ""'>
+		  AND G.PROG_DT = #{targetDt}
+		</if>
+		<if test='searchFrom != null and searchFrom != ""'>
+		  AND G.PROG_DT <![CDATA[>=]]> #{searchFrom}
+		</if>
+		<if test='searchTo != null and searchTo != ""'>
+		  AND G.PROG_DT <![CDATA[<=]]> #{searchTo}
+		</if>
+		<if test='searchCaseNo != null and searchCaseNo != ""'>
+		  AND S.CASE_NO LIKE '%' || #{searchCaseNo} || '%'
+		</if>
+		<if test='searchDyprKind != null and searchDyprKind != ""'>
+		  AND G.DYPR_KIND_CD = #{searchDyprKind}
+		</if>
+		<if test='searchInstance != null and searchInstance != ""'>
+		  AND S.INSTANCE_CD = #{searchInstance}
+		</if>
+		 ORDER BY G.PROG_DT, G.PROG_TM, G.PROG_ID
+	</select>
+
+	<select id="selectHearing" resultType="narainet.law.schedule.service.LawScheduleVO">
+		SELECT <include refid="hearingCols"/>
+		<include refid="hearingFrom"/>
+		 WHERE G.PROG_ID = #{progId}
+	</select>
+
+	<insert id="insertHearing" parameterType="narainet.law.schedule.service.LawScheduleVO">
+		INSERT INTO LAW_SUIT_PROG (
+			PROG_ID, SUIT_ID, PROG_KIND_CD, DYPR_KIND_CD, PROG_DT, PROG_TM,
+			PLACE, PROG_DESC, STAT_CD, RESULT_DESC, REG_DT
+		) VALUES (
+			#{progId}, #{suitId}, 'S001', #{dyprKindCd, jdbcType=VARCHAR}, #{progDt}, #{progTm, jdbcType=VARCHAR},
+			#{place, jdbcType=VARCHAR}, #{progDesc, jdbcType=VARCHAR}, COALESCE(#{statCd, jdbcType=VARCHAR}, 'S001'),
+			#{resultDesc, jdbcType=VARCHAR}, TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS')
+		)
+	</insert>
+
+	<delete id="deleteHearing">
+		DELETE FROM LAW_SUIT_PROG WHERE PROG_ID = #{progId} AND PROG_KIND_CD = 'S001'
+	</delete>
+
+</mapper>

@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/cate/Cate_SQL_oracle.xml
+
+  법령 분류(TB_CATE) MyBatis 매핑.
+   - 트리 한 방 조회: CONNECT BY PRIOR ICATE_NO = IREF
+   - 들여쓰기 LPAD + LEVEL
+   - 정렬: ORDER SIBLINGS BY ISEQ
+   - 법령 카운트 LEFT OUTER JOIN
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.cate.mapper.CateMapper">
+
+	<resultMap id="cateResult" type="narainet.rlms.cate.service.CateVO">
+		<result property="cateNo"      column="ICATE_NO"/>
+		<result property="gubunId"     column="SGUBUN_ID"/>
+		<result property="cateNm"      column="SNAME"/>
+		<result property="fullNm"      column="SFULL_NAME"/>
+		<result property="level"       column="ILEVEL"/>
+		<result property="ref"         column="IREF"/>
+		<result property="refLv1"      column="IREF_LV_1"/>
+		<result property="refLv2"      column="IREF_LV_2"/>
+		<result property="refLv3"      column="IREF_LV_3"/>
+		<result property="refLv4"      column="IREF_LV_4"/>
+		<result property="refLv5"      column="IREF_LV_5"/>
+		<result property="refLv6"      column="IREF_LV_6"/>
+		<result property="refLv7"      column="IREF_LV_7"/>
+		<result property="refLv8"      column="IREF_LV_8"/>
+		<result property="refLv9"      column="IREF_LV_9"/>
+		<result property="refLv10"     column="IREF_LV_10"/>
+		<result property="dispYn"      column="SDISP_YN"/>
+		<result property="delYn"       column="SDEL_YN"/>
+		<result property="seq"         column="ISEQ"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="sysId"       column="SSYS_ID"/>
+		<result property="indentPath"  column="INDENT_PATH"/>
+		<result property="treeLevel"   column="TREE_LEVEL"/>
+		<result property="promCnt"     column="PROM_CNT"/>
+		<result property="childCnt"    column="CHILD_CNT"/>
+	</resultMap>
+
+	<sql id="cateColumns">
+		c.ICATE_NO, c.SGUBUN_ID, c.SNAME, c.SFULL_NAME, c.ILEVEL, c.IREF,
+		c.IREF_LV_1, c.IREF_LV_2, c.IREF_LV_3, c.IREF_LV_4, c.IREF_LV_5,
+		c.IREF_LV_6, c.IREF_LV_7, c.IREF_LV_8, c.IREF_LV_9, c.IREF_LV_10,
+		c.SDISP_YN, c.SDEL_YN, c.ISEQ, c.SINS_DT, c.SSYS_ID
+	</sql>
+
+	<!-- ============================================================ -->
+	<!-- 트리 조회 (CONNECT BY 한 방)                                  -->
+	<!-- ============================================================ -->
+
+	<select id="selectCateTree" resultMap="cateResult">
+		SELECT LPAD(' ', 4*(t.LV-1)) || t.SNAME AS INDENT_PATH,
+		       t.LV AS TREE_LEVEL,
+		       t.ICATE_NO, t.SGUBUN_ID, t.SNAME, t.SFULL_NAME, t.ILEVEL, t.IREF,
+		       t.IREF_LV_1, t.IREF_LV_2, t.IREF_LV_3, t.IREF_LV_4, t.IREF_LV_5,
+		       t.IREF_LV_6, t.IREF_LV_7, t.IREF_LV_8, t.IREF_LV_9, t.IREF_LV_10,
+		       t.SDISP_YN, t.SDEL_YN, t.ISEQ, t.SINS_DT, t.SSYS_ID,
+		       NVL(p.PROM_CNT, 0) AS PROM_CNT,
+		       NVL(ch.CHILD_CNT, 0) AS CHILD_CNT
+		  FROM (
+		    SELECT LEVEL AS LV, c.*
+		      FROM TB_CATE c
+		     WHERE c.SDEL_YN = 'N'
+		     START WITH c.IREF = 0
+		     CONNECT BY PRIOR c.ICATE_NO = c.IREF
+		     ORDER SIBLINGS BY c.ISEQ, c.ICATE_NO
+		  ) t
+		  LEFT OUTER JOIN
+		    <!-- 법령 카운트: frontGate=true(사용자 검색 필터트리)면 front 목록과 같은 현행 정의
+		         (표시 + 폐지일 미도래)로 집계해 배지 건수 = 목록 건수. 관리 트리는 원본 유지. -->
+		    (SELECT ICATE_NO, COUNT(*) AS PROM_CNT
+		       FROM TB_PROM p
+		      WHERE SEXISTING_YN = 'Y'
+			<if test="frontGate">
+		       AND p.SDISP_YN = 'Y'
+			<include refid="narainet.rlms.prom.mapper.PromMapper.notExpired"/>
+			</if>
+		      GROUP BY ICATE_NO) p
+		    ON t.ICATE_NO = p.ICATE_NO
+		  LEFT OUTER JOIN
+		    (SELECT IREF, COUNT(*) AS CHILD_CNT
+		       FROM TB_CATE
+		      WHERE SDEL_YN = 'N'
+		      GROUP BY IREF) ch
+		    ON t.ICATE_NO = ch.IREF
+	</select>
+
+	<select id="selectChildren" resultMap="cateResult">
+		SELECT <include refid="cateColumns"/>,
+		       NULL AS INDENT_PATH, NULL AS TREE_LEVEL, NULL AS PROM_CNT, NULL AS CHILD_CNT
+		  FROM TB_CATE c
+		 WHERE c.IREF    = #{parentNo}
+		   AND c.SDEL_YN = 'N'
+		 ORDER BY c.ISEQ, c.ICATE_NO
+	</select>
+
+	<select id="selectCateByNo" resultMap="cateResult">
+		SELECT <include refid="cateColumns"/>,
+		       NULL AS INDENT_PATH, NULL AS TREE_LEVEL, NULL AS PROM_CNT, NULL AS CHILD_CNT
+		  FROM TB_CATE c
+		 WHERE c.ICATE_NO = #{cateNo}
+	</select>
+
+	<select id="selectDescendants" resultMap="cateResult">
+		SELECT <include refid="cateColumns"/>,
+		       NULL AS INDENT_PATH, LEVEL AS TREE_LEVEL, NULL AS PROM_CNT, NULL AS CHILD_CNT
+		  FROM TB_CATE c
+		 WHERE c.SDEL_YN = 'N'
+		 START WITH c.IREF = #{cateNo}
+		 CONNECT BY PRIOR c.ICATE_NO = c.IREF
+		 ORDER SIBLINGS BY c.ISEQ, c.ICATE_NO
+	</select>
+
+	<!-- 여러 시작 분류의 자손-또는-자신 집합 — 자동링크 제외범위(full_text_category) 확장.
+	     행별 CONNECT BY 금지 원칙: 시작점을 IN 으로 묶어 집합 1회 확장. -->
+	<select id="selectDescendantSetIncludingSelf" resultType="long">
+		SELECT c.ICATE_NO
+		  FROM TB_CATE c
+		 START WITH c.ICATE_NO IN
+		<foreach collection="cateNos" item="cn" open="(" separator="," close=")">#{cn}</foreach>
+		 CONNECT BY PRIOR c.ICATE_NO = c.IREF
+	</select>
+
+	<select id="selectFullNameByNo" resultType="string">
+		SELECT GET_FULL_NAME_BY_CATE_NO('NONE', #{cateNo}) FROM DUAL
+	</select>
+
+	<select id="selectMaxSeq" resultType="int">
+		SELECT NVL(MAX(ISEQ), 0) + 1
+		  FROM TB_CATE
+		 WHERE IREF    = #{parentNo}
+		   AND SDEL_YN = 'N'
+	</select>
+
+	<!-- 삭제 차단 판정용 카운트 -->
+	<select id="selectPromCntByCate" resultType="int">
+		SELECT COUNT(*) FROM TB_PROM
+		 WHERE ICATE_NO = #{cateNo}
+		   AND SEXISTING_YN = 'Y'
+	</select>
+
+	<select id="selectChildCntByCate" resultType="int">
+		SELECT COUNT(*) FROM TB_CATE
+		 WHERE IREF    = #{cateNo}
+		   AND SDEL_YN = 'N'
+	</select>
+
+	<select id="selectMaxCateNo" resultType="long">
+		SELECT NVL(MAX(ICATE_NO), 0) FROM TB_CATE
+	</select>
+
+	<!-- 구분(FT_GUBUN_N) 최대 번호 — 신규 구분 채번. ccm + TB_CATE + TB_PROM 의 잔재 번호까지
+	     통합 MAX (과거 삭제된 구분 번호를 재사용하면 남아있던 분류/규정 행이 새 구분에 붙는 사고 방지) -->
+	<select id="selectMaxGubunCodeNo" resultType="long">
+		SELECT NVL(MAX(TO_NUMBER(REGEXP_SUBSTR(V, '[0-9]+$'))), 0) FROM (
+			SELECT CODE AS V FROM COMTCCMMNDETAILCODE
+			 WHERE CODE_ID = 'SGUBUN' AND REGEXP_LIKE(CODE, '^FT_GUBUN_[0-9]+$')
+			UNION ALL
+			SELECT SGUBUN_ID FROM TB_CATE WHERE REGEXP_LIKE(SGUBUN_ID, '^FT_GUBUN_[0-9]+$')
+			UNION ALL
+			SELECT SGUBUN_ID FROM TB_PROM WHERE REGEXP_LIKE(SGUBUN_ID, '^FT_GUBUN_[0-9]+$')
+		)
+	</select>
+
+	<!-- 구분 참조 카운트 — 구분 삭제 차단 판정 (분류/규정이 쓰고 있으면 삭제 불가) -->
+	<select id="selectGubunRefCnts" resultType="java.util.LinkedHashMap">
+		SELECT
+			( SELECT COUNT(*) FROM TB_CATE
+			   WHERE SGUBUN_ID = #{gubunId} AND NVL(SDEL_YN, 'N') != 'Y' ) AS CATE_CNT,
+			( SELECT COUNT(*) FROM TB_PROM
+			   WHERE SGUBUN_ID = #{gubunId} ) AS PROM_CNT
+		  FROM DUAL
+	</select>
+
+	<!-- ============================================================ -->
+	<!-- 변경                                                          -->
+	<!-- ============================================================ -->
+
+	<insert id="insertCate" parameterType="narainet.rlms.cate.service.CateVO">
+		INSERT INTO TB_CATE (
+			ICATE_NO, SGUBUN_ID, SNAME, SFULL_NAME, ILEVEL, IREF,
+			IREF_LV_1, IREF_LV_2, IREF_LV_3, IREF_LV_4, IREF_LV_5,
+			IREF_LV_6, IREF_LV_7, IREF_LV_8, IREF_LV_9, IREF_LV_10,
+			SDISP_YN, SDEL_YN, ISEQ, SINS_DT
+		) VALUES (
+			#{cateNo}, #{gubunId}, #{cateNm}, #{fullNm}, #{level}, #{ref},
+			#{refLv1}, #{refLv2}, #{refLv3}, #{refLv4}, #{refLv5},
+			#{refLv6}, #{refLv7}, #{refLv8}, #{refLv9}, #{refLv10},
+			#{dispYn}, 'N', #{seq},
+			TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS')
+		)
+	</insert>
+
+	<update id="updateCate" parameterType="narainet.rlms.cate.service.CateVO">
+		UPDATE TB_CATE SET
+			SGUBUN_ID  = #{gubunId},
+			SNAME      = #{cateNm},
+			SFULL_NAME = #{fullNm},
+			ILEVEL     = #{level},
+			IREF       = #{ref},
+			IREF_LV_1  = #{refLv1},
+			IREF_LV_2  = #{refLv2},
+			IREF_LV_3  = #{refLv3},
+			IREF_LV_4  = #{refLv4},
+			IREF_LV_5  = #{refLv5},
+			IREF_LV_6  = #{refLv6},
+			IREF_LV_7  = #{refLv7},
+			IREF_LV_8  = #{refLv8},
+			IREF_LV_9  = #{refLv9},
+			IREF_LV_10 = #{refLv10},
+			SDISP_YN   = #{dispYn},
+			ISEQ       = #{seq}
+		WHERE ICATE_NO = #{cateNo}
+	</update>
+
+	<update id="updateCateDeleted">
+		UPDATE TB_CATE SET SDEL_YN = 'Y' WHERE ICATE_NO = #{cateNo}
+	</update>
+
+</mapper>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/receipt/Law_Receipt_SQL_postgres.xml
+  법원서류접수(LAW_COURT_RECEIPT) — 접수 CRUD + 등록부서·관련부서1·2 조인. §7.11
+-->
+<mapper namespace="narainet.law.receipt.mapper.LawReceiptMapper">
+
+	<sql id="receiptCols">
+		R.RECEIPT_ID     AS receiptId,
+		R.RECEIPT_TITL   AS receiptTitl,
+		R.ORGNZT_ID      AS orgnztId,
+		OG.ORGNZT_NM     AS orgnztNm,
+		R.REL_ORGNZT_ID1 AS relOrgnztId1,
+		R1.ORGNZT_NM     AS relOrgnztNm1,
+		R.REL_ORGNZT_ID2 AS relOrgnztId2,
+		R2.ORGNZT_NM     AS relOrgnztNm2,
+		R.ATCH_FILE_ID   AS atchFileId,
+		R.REG_USER_ID    AS regUserId,
+		R.REG_DT         AS regDt,
+		R.UPD_USER_ID    AS updUserId,
+		R.UPD_DT         AS updDt
+	</sql>
+
+	<sql id="receiptFrom">
+		FROM LAW_COURT_RECEIPT R
+		LEFT OUTER JOIN COMTNORGNZTINFO OG ON OG.ORGNZT_ID = R.ORGNZT_ID
+		LEFT OUTER JOIN COMTNORGNZTINFO R1 ON R1.ORGNZT_ID = R.REL_ORGNZT_ID1
+		LEFT OUTER JOIN COMTNORGNZTINFO R2 ON R2.ORGNZT_ID = R.REL_ORGNZT_ID2
+	</sql>
+
+	<sql id="searchWhere">
+		<if test='searchFrom != null and searchFrom != ""'>
+		  AND SUBSTR(R.REG_DT, 1, 8) <![CDATA[>=]]> #{searchFrom}
+		</if>
+		<if test='searchTo != null and searchTo != ""'>
+		  AND SUBSTR(R.REG_DT, 1, 8) <![CDATA[<=]]> #{searchTo}
+		</if>
+		<if test='searchKeyword != null and searchKeyword != ""'>
+		  AND R.RECEIPT_TITL LIKE '%' || #{searchKeyword} || '%'
+		</if>
+	</sql>
+
+	<select id="selectReceiptCnt" parameterType="narainet.law.receipt.service.LawReceiptVO" resultType="int">
+		SELECT COUNT(*)
+		FROM LAW_COURT_RECEIPT R
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectReceiptList" parameterType="narainet.law.receipt.service.LawReceiptVO"
+	        resultType="narainet.law.receipt.service.LawReceiptVO">
+		SELECT <include refid="receiptCols"/>
+		                <include refid="receiptFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="searchWhere"/>
+		                 ORDER BY R.RECEIPT_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="selectReceipt" resultType="narainet.law.receipt.service.LawReceiptVO">
+		SELECT <include refid="receiptCols"/>
+		<include refid="receiptFrom"/>
+		 WHERE R.RECEIPT_ID = #{receiptId}
+	</select>
+
+	<insert id="insertReceipt" parameterType="narainet.law.receipt.service.LawReceiptVO">
+		INSERT INTO LAW_COURT_RECEIPT (
+			RECEIPT_ID, RECEIPT_TITL, ORGNZT_ID, REL_ORGNZT_ID1, REL_ORGNZT_ID2,
+			ATCH_FILE_ID, REG_USER_ID, REG_DT
+		) VALUES (
+			#{receiptId}, #{receiptTitl, jdbcType=VARCHAR}, #{orgnztId, jdbcType=CHAR},
+			#{relOrgnztId1, jdbcType=CHAR}, #{relOrgnztId2, jdbcType=CHAR},
+			#{atchFileId, jdbcType=CHAR}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateReceipt" parameterType="narainet.law.receipt.service.LawReceiptVO">
+		UPDATE LAW_COURT_RECEIPT
+		   SET RECEIPT_TITL   = #{receiptTitl, jdbcType=VARCHAR},
+		       REL_ORGNZT_ID1 = #{relOrgnztId1, jdbcType=CHAR},
+		       REL_ORGNZT_ID2 = #{relOrgnztId2, jdbcType=CHAR},
+		       ATCH_FILE_ID   = #{atchFileId, jdbcType=CHAR},
+		       UPD_USER_ID    = #{updUserId},
+		       UPD_DT         = #{updDt}
+		 WHERE RECEIPT_ID = #{receiptId}
+	</update>
+
+	<delete id="deleteReceipt">
+		DELETE FROM LAW_COURT_RECEIPT WHERE RECEIPT_ID = #{receiptId}
+	</delete>
+
+</mapper>

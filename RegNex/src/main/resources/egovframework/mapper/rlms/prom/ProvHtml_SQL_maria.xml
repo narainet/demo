@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/prom/ProvHtml_SQL_maria.xml
+
+  조항 HTML 본문(TB_PROV_HTML) MyBatis 매핑.
+   - 트리거 TRG_DEL_PROV_HTML 가 DELETE 시 TB_REL_VRSN(PROVISION) + TB_ATTACH cascade 처리.
+   - 트리거 TRG_UPD_PROV_HTML 가 UPDATE 시 TB_FT_CACHE_QUEUE 캐시 무효화.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.prom.mapper.ProvHtmlMapper">
+
+	<resultMap id="provHtmlResult" type="narainet.rlms.prom.service.ProvHtmlVO">
+		<result property="provHtmlNo"  column="IPHTML_NO"/>
+		<result property="promNo"      column="IPROM_NO"/>
+		<result property="item"        column="SITEM"/>
+		<result property="title"       column="STITLE"/>
+		<result property="contents"    column="SCONTENTS"     jdbcType="CLOB"/>
+		<result property="reason"      column="SREASON"       jdbcType="CLOB"/>
+		<result property="gaejungType" column="SGAEJUNG_TYPE"/>
+		<result property="dispYn"      column="SDISP_YN"/>
+		<result property="startDate"   column="SSTART_DT"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="searchText"  column="SSEARCH_TEXT"  jdbcType="CLOB"/>
+		<result property="sysId"       column="SSYS_ID"/>
+	</resultMap>
+
+	<select id="selectProvHtmlList" resultMap="provHtmlResult">
+		SELECT IPHTML_NO, IPROM_NO, SITEM, STITLE, SCONTENTS, SREASON,
+		       SGAEJUNG_TYPE, SDISP_YN, SSTART_DT, SINS_DT, SSEARCH_TEXT, SSYS_ID
+		  FROM TB_PROV_HTML
+		 WHERE IPROM_NO = #{promNo}
+		 ORDER BY SITEM
+	</select>
+
+	<!--
+	  ★ 누적(상속) 조회 — 레거시 provisionHtmlService.getList(사용자측 displayAll=false) 이식.
+	    같은 법령(ILAW_ID) 회차들(ILAW_NO 이하) 중 SITEM 별 "표시(SDISP_YN='Y') 최신" 회차의 행만 채택.
+	    레거시 동일 — 숨김행/숨김회차는 MAX 계산에서 제외해 직전 표시 버전으로 폴백.
+	    (NULLIFY 류 개정유형 숨김은 렌더러에서 처리)
+	-->
+	<select id="selectProvHtmlListCumulative" resultMap="provHtmlResult">
+		SELECT H.IPHTML_NO, H.IPROM_NO, H.SITEM, H.STITLE, H.SCONTENTS, H.SREASON,
+		       H.SGAEJUNG_TYPE, H.SDISP_YN, H.SSTART_DT, H.SINS_DT, H.SSEARCH_TEXT, H.SSYS_ID
+		  FROM TB_PROV_HTML H, TB_PROM PR,
+		     ( SELECT H2.IPHTML_NO
+		         FROM TB_PROV_HTML H2,
+		            ( SELECT PR2.IPROM_NO, PH.SITEM
+		                FROM TB_PROM PR2,
+		                   ( SELECT MAX(P2.ILAW_NO) AS LAW_NO, H3.SITEM AS SITEM
+		                       FROM TB_PROM P2, TB_PROV_HTML H3
+		                      WHERE P2.IPROM_NO = H3.IPROM_NO
+		                        AND P2.ILAW_ID  = #{lawId}
+		                        AND P2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		                        AND NVL(H3.SDISP_YN, 'Y') = 'Y'
+		                        AND NVL(P2.SDISP_YN, 'Y') = 'Y'
+		                      GROUP BY H3.SITEM ) PH
+		               WHERE PR2.ILAW_ID = #{lawId}
+		                 AND PR2.ILAW_NO = PH.LAW_NO ) PRD
+		        WHERE H2.IPROM_NO = PRD.IPROM_NO
+		          AND H2.SITEM    = PRD.SITEM ) H_MAX
+		 WHERE H.IPHTML_NO = H_MAX.IPHTML_NO
+		   AND H.IPROM_NO  = PR.IPROM_NO
+		   AND PR.ILAW_ID  = #{lawId}
+		   AND NVL(H.SDISP_YN, 'Y') = 'Y'
+		 ORDER BY H.SITEM ASC
+	</select>
+
+	<!--
+	  관리자(IDE 트리) 누적 조회 — TB_DOCU selectDocuListCumulative 의 관리자 변형과 동일 규칙:
+	    내부 MAX 는 숨김 무관 전체 계보, 외부에서 숨김행은 자기 회차일 때만 노출
+	    (이전 회차의 숨김행은 계보 통째 숨김 = tombstone, 자기 회차에선 관리자가 보고 되살릴 수 있게).
+	-->
+	<select id="selectProvHtmlListCumulativeAdmin" resultMap="provHtmlResult">
+		SELECT H.IPHTML_NO, H.IPROM_NO, H.SITEM, H.STITLE, H.SCONTENTS, H.SREASON,
+		       H.SGAEJUNG_TYPE, H.SDISP_YN, H.SSTART_DT, H.SINS_DT, H.SSEARCH_TEXT, H.SSYS_ID
+		  FROM TB_PROV_HTML H, TB_PROM PR,
+		     ( SELECT H2.IPHTML_NO
+		         FROM TB_PROV_HTML H2,
+		            ( SELECT PR2.IPROM_NO, PH.SITEM
+		                FROM TB_PROM PR2,
+		                   ( SELECT MAX(P2.ILAW_NO) AS LAW_NO, H3.SITEM AS SITEM
+		                       FROM TB_PROM P2, TB_PROV_HTML H3
+		                      WHERE P2.IPROM_NO = H3.IPROM_NO
+		                        AND P2.ILAW_ID  = #{lawId}
+		                        AND P2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		                      GROUP BY H3.SITEM ) PH
+		               WHERE PR2.ILAW_ID = #{lawId}
+		                 AND PR2.ILAW_NO = PH.LAW_NO ) PRD
+		        WHERE H2.IPROM_NO = PRD.IPROM_NO
+		          AND H2.SITEM    = PRD.SITEM ) H_MAX
+		 WHERE H.IPHTML_NO = H_MAX.IPHTML_NO
+		   AND H.IPROM_NO  = PR.IPROM_NO
+		   AND PR.ILAW_ID  = #{lawId}
+		   AND ( NVL(H.SDISP_YN, 'Y') = 'Y'
+		      OR ( H.SDISP_YN = 'N' AND PR.ILAW_NO = #{lawNo} ) )
+		 ORDER BY H.SITEM ASC
+	</select>
+
+	<select id="selectProvHtmlByNo" resultMap="provHtmlResult">
+		SELECT IPHTML_NO, IPROM_NO, SITEM, STITLE, SCONTENTS, SREASON,
+		       SGAEJUNG_TYPE, SDISP_YN, SSTART_DT, SINS_DT, SSEARCH_TEXT, SSYS_ID
+		  FROM TB_PROV_HTML
+		 WHERE IPHTML_NO = #{provHtmlNo}
+	</select>
+
+	<select id="selectProvHtmlByPromItem" resultMap="provHtmlResult">
+		SELECT IPHTML_NO, IPROM_NO, SITEM, STITLE, SCONTENTS, SREASON,
+		       SGAEJUNG_TYPE, SDISP_YN, SSTART_DT, SINS_DT, SSEARCH_TEXT, SSYS_ID
+		  FROM TB_PROV_HTML
+		 WHERE IPROM_NO = #{promNo}
+		   AND SITEM    = #{item}
+	</select>
+
+	<!--
+	  조 번호(SITEM) 변경 검사 — promNo 가 속한 규정 계보 전체에서 같은 SITEM 사용 건수.
+	  SITEM 은 selectProvHtmlListCumulative 의 GROUP BY 키(계보 키)라 회차 하나만 봐선 안 된다.
+	-->
+	<select id="countProvHtmlItemInLaw" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROV_HTML H, TB_PROM P
+		 WHERE H.IPROM_NO = P.IPROM_NO
+		   AND P.ILAW_ID  = ( SELECT ILAW_ID FROM TB_PROM WHERE IPROM_NO = #{promNo} )
+		   AND H.SITEM    = #{item}
+		<if test="exceptProvHtmlNo != null">
+		   AND H.IPHTML_NO <![CDATA[ != ]]> #{exceptProvHtmlNo}
+		</if>
+	</select>
+
+	<insert id="insertProvHtml" parameterType="narainet.rlms.prom.service.ProvHtmlVO">
+		INSERT INTO TB_PROV_HTML (
+			IPHTML_NO, IPROM_NO, SITEM, STITLE, SCONTENTS, SREASON,
+			SGAEJUNG_TYPE, SDISP_YN, SSTART_DT, SINS_DT, SSEARCH_TEXT
+		) VALUES (
+			#{provHtmlNo}, #{promNo}, #{item}, #{title},
+			#{contents,jdbcType=CLOB}, #{reason,jdbcType=CLOB},
+			#{gaejungType},
+			NVL(#{dispYn}, 'Y'),
+			NVL(#{startDate,jdbcType=VARCHAR}, TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS')),
+			TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS'),
+			#{searchText,jdbcType=CLOB}
+		)
+	</insert>
+
+	<update id="updateProvHtml" parameterType="narainet.rlms.prom.service.ProvHtmlVO">
+		UPDATE TB_PROV_HTML SET
+			SITEM         = #{item},
+			STITLE        = #{title},
+			SCONTENTS     = #{contents,jdbcType=CLOB},
+			SREASON       = #{reason,jdbcType=CLOB},
+			SGAEJUNG_TYPE = #{gaejungType},
+			SDISP_YN      = NVL(#{dispYn}, SDISP_YN),
+			SSTART_DT     = NVL(#{startDate,jdbcType=VARCHAR}, SSTART_DT),
+			SSEARCH_TEXT  = #{searchText,jdbcType=CLOB}
+		WHERE IPHTML_NO = #{provHtmlNo}
+	</update>
+
+	<delete id="deleteProvHtml">
+		DELETE FROM TB_PROV_HTML WHERE IPHTML_NO = #{provHtmlNo}
+	</delete>
+
+</mapper>

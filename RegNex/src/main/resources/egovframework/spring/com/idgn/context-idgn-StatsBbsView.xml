@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <!-- 게시판 조회통계 채번(TB_STATS_BBS_VIEW.ISBVIEW_NO, 숫자) — COMTECOPSEQ 'STATS_BBS_VIEW_NO'.
+         적재는 사용자 게시글 상세(EgovBoardUserController) GET 실열람 1회=1행(규정 조회통계와 동일 철학). -->
+    <bean name="egovStatsBbsViewIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="STATS_BBS_VIEW_NO"/>
+    </bean>
+
+</beans>

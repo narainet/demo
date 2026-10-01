@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelImg_SQL_postgres.xml
+
+  관련자료 — IMAGE 액션 자식(TB_REL_IMG) MyBatis 매핑.
+   - ORGN 매퍼와 구조 동일. TB_ATTACH 조인으로 파일명/확장자/크기 표시.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelImgMapper">
+
+	<resultMap id="relImgResult" type="narainet.rlms.related.service.RelImgVO">
+		<result property="relImgNo"  column="IRIMG_NO"/>
+		<result property="relVrsnNo" column="IRVRSN_NO"/>
+		<result property="attNo"     column="IATT_NO"/>
+		<result property="title"     column="STITLE"/>
+		<result property="delYn"     column="SDEL_YN"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="sysId"     column="SSYS_ID"/>
+		<result property="attName"   column="ATT_NAME"/>
+		<result property="attExt"    column="ATT_EXT"/>
+		<result property="attSize"   column="ATT_SIZE"/>
+	</resultMap>
+
+	<sql id="relImgCols">
+		I.IRIMG_NO, I.IRVRSN_NO, I.IATT_NO, I.STITLE, I.SDEL_YN,
+		I.SINS_DT, I.SSYS_ID,
+		A.SNAME AS ATT_NAME, A.SEXT AS ATT_EXT, A.ISIZE AS ATT_SIZE
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relImgResult">
+		SELECT <include refid="relImgCols"/>
+		  FROM TB_REL_IMG I
+		  LEFT OUTER JOIN TB_ATTACH A ON I.IATT_NO = A.IATT_NO
+		 WHERE I.IRVRSN_NO = #{relVrsnNo}
+		   AND I.SDEL_YN   = 'N'
+		 ORDER BY I.IRIMG_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relImgResult">
+		SELECT <include refid="relImgCols"/>
+		  FROM TB_REL_IMG I
+		  LEFT OUTER JOIN TB_ATTACH A ON I.IATT_NO = A.IATT_NO
+		 WHERE I.IRIMG_NO = #{relImgNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelImgVO">
+		INSERT INTO TB_REL_IMG (
+			IRIMG_NO, IRVRSN_NO, IATT_NO, STITLE, SDEL_YN, SINS_DT
+		) VALUES (
+			#{relImgNo},
+			#{relVrsnNo},
+			#{attNo,jdbcType=NUMERIC},
+			#{title,jdbcType=VARCHAR},
+			#{delYn,jdbcType=VARCHAR},
+			#{insDt,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelImgVO">
+		UPDATE TB_REL_IMG
+		   SET STITLE = #{title,jdbcType=VARCHAR}
+		 WHERE IRIMG_NO = #{relImgNo}
+	</update>
+
+	<update id="softDelete">
+		UPDATE TB_REL_IMG SET SDEL_YN = 'Y' WHERE IRIMG_NO = #{relImgNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_IMG WHERE IRIMG_NO = #{relImgNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_IMG WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+</mapper>

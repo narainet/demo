@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelWord_SQL_postgres.xml
+
+  관련자료 — WORD 액션 자식(TB_REL_WORD) MyBatis 매핑.
+   - SHTML/SSEARCH_TEXT 는 CLOB → 변환 인프라 도입 후 채워질 컬럼. 1차 INSERT 는 NULL.
+   - TB_ATTACH 조인으로 파일명/확장자/크기 표시.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelWordMapper">
+
+	<resultMap id="relWordResult" type="narainet.rlms.related.service.RelWordVO">
+		<result property="relWordNo"      column="IRWORD_NO"/>
+		<result property="relVrsnNo"      column="IRVRSN_NO"/>
+		<result property="attNo"          column="IATT_NO"/>
+		<result property="title"          column="STITLE"/>
+		<result property="html"           column="SHTML"/>
+		<result property="type"           column="STYPE"/>
+		<result property="delYn"          column="SDEL_YN"/>
+		<result property="searchText"     column="SSEARCH_TEXT"/>
+		<result property="insDt"          column="SINS_DT"/>
+		<result property="sysId"          column="SSYS_ID"/>
+		<result property="htmlPath"       column="SHTML_PATH"/>
+		<result property="searchTextPath" column="SSEARCH_TEXT_PATH"/>
+		<result property="clobFileYn"     column="SCLOB_FILE_YN"/>
+		<result property="path"           column="SPATH"/>
+		<result property="attName"        column="ATT_NAME"/>
+		<result property="attExt"         column="ATT_EXT"/>
+		<result property="attSize"        column="ATT_SIZE"/>
+	</resultMap>
+
+	<sql id="relWordCols">
+		W.IRWORD_NO, W.IRVRSN_NO, W.IATT_NO, W.STITLE, W.SHTML, W.STYPE,
+		W.SDEL_YN, W.SSEARCH_TEXT, W.SINS_DT, W.SSYS_ID,
+		W.SHTML_PATH, W.SSEARCH_TEXT_PATH, W.SCLOB_FILE_YN, W.SPATH,
+		A.SNAME AS ATT_NAME, A.SEXT AS ATT_EXT, A.ISIZE AS ATT_SIZE
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relWordResult">
+		SELECT <include refid="relWordCols"/>
+		  FROM TB_REL_WORD W
+		  LEFT OUTER JOIN TB_ATTACH A ON W.IATT_NO = A.IATT_NO
+		 WHERE W.IRVRSN_NO = #{relVrsnNo}
+		   AND W.SDEL_YN   = 'N'
+		 ORDER BY W.IRWORD_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relWordResult">
+		SELECT <include refid="relWordCols"/>
+		  FROM TB_REL_WORD W
+		  LEFT OUTER JOIN TB_ATTACH A ON W.IATT_NO = A.IATT_NO
+		 WHERE W.IRWORD_NO = #{relWordNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelWordVO">
+		INSERT INTO TB_REL_WORD (
+			IRWORD_NO, IRVRSN_NO, IATT_NO, STITLE, SHTML, STYPE,
+			SDEL_YN, SSEARCH_TEXT, SINS_DT,
+			SHTML_PATH, SSEARCH_TEXT_PATH, SCLOB_FILE_YN, SPATH
+		) VALUES (
+			#{relWordNo},
+			#{relVrsnNo},
+			#{attNo,jdbcType=NUMERIC},
+			#{title,jdbcType=VARCHAR},
+			#{html},
+			#{type,jdbcType=VARCHAR},
+			#{delYn,jdbcType=VARCHAR},
+			#{searchText},
+			#{insDt,jdbcType=VARCHAR},
+			#{htmlPath,jdbcType=VARCHAR},
+			#{searchTextPath,jdbcType=VARCHAR},
+			#{clobFileYn,jdbcType=VARCHAR},
+			#{path,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelWordVO">
+		UPDATE TB_REL_WORD
+		   SET STITLE = #{title,jdbcType=VARCHAR}
+		 WHERE IRWORD_NO = #{relWordNo}
+	</update>
+
+	<update id="softDelete">
+		UPDATE TB_REL_WORD SET SDEL_YN = 'Y' WHERE IRWORD_NO = #{relWordNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_WORD WHERE IRWORD_NO = #{relWordNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_WORD WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+	<!-- 법령별 현행분류 집계 — 게이트 판정 기준(Prom_SQL lawCurCateAgg 의 alias P 판 로컬 클론, 별도 namespace.
+	     ★크로스 네임스페이스 include 금지: 게이트 내부의 중첩 <include refid="..."/> 짧은 refid 가 포함하는 쪽
+	     네임스페이스로 재해석되어 기동 실패(MyBatis applyCurrentNamespace) — Home/ProvVrsn/PromMap 선례처럼 로컬 클론.
+	     ★성능(2026-07-08 재작성 계승): 무상관 집합 1회 계산, 행별 상관쿼리 0) -->
+	<sql id="lawCurCateAggRW">( SELECT rk.ILAW_ID, rk.ICATE_NO CUR_CATE, rk.SGUBUN_ID CUR_GUBUN FROM ( SELECT pl.ILAW_ID, pl.ICATE_NO, pl.SGUBUN_ID, ROW_NUMBER() OVER (PARTITION BY pl.ILAW_ID ORDER BY pl.ILAW_NO DESC, pl.IPROM_NO DESC) RNK FROM TB_PROM pl ) rk WHERE rk.RNK = 1 )</sql>
+
+	<!-- 분류/구분별 열람제한 게이트 — Prom_SQL cateReadGate 의 alias P 판(searchByText 의 TB_PROM 별칭).
+	     판정=법령 현행분류. 면제역할(ADMIN/EDITOR/APPROVER)은 자바(PromReadGuard.gateNeeded()=false)가 미적용.
+	     비면제 사용자에게만 front 정합 셋(현행회차 존재·draft 상한·유효기간 + 숨김구분 제외 + 삭제분류 제외)도
+	     <if> 내부에 함께 적용 — 관리자/편집계는 현행 없는(전부 draft/폐지) 법령의 관련문서도 계속 검색
+	     가능해야 하므로 전역 배치 금지(UnifiedSearch relsUnion 자료축과 동일 논리, 별칭만 P 판).
+	     ★게이트 로직 변경 시 동시 수정(클론 상호참조): Prom_SQL cateReadGate(정본) / UnifiedSearch_SQL readGate /
+	     ProvVrsn_SQL cateReadGatePR / PromMap_SQL / Home_SQL homeCateReadGate / 본 파일 cateReadGateRW -->
+	<sql id="cateReadGateRW">
+		<if test="applyReadGate">
+		<!-- 현행회차 존재 + draft 상한 + 유효기간 — 관련문서가 붙은 회차(P) 이상의 '현행' 회차가 실재하고
+		     유효기간 내일 것. cur.ILAW_NO >= P.ILAW_NO 는 자료축 relMasterCurrent 의
+		     pr.ILAW_NO <= cur.ILAW_NO 상한과 등가(미승인 draft 회차에 붙은 문서 배제) -->
+		AND EXISTS ( SELECT 1 FROM TB_PROM cur
+		              WHERE cur.ILAW_ID = P.ILAW_ID
+		                AND cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y'
+		                <![CDATA[ AND cur.ILAW_NO >= P.ILAW_NO ]]>
+		                AND ( cur.SSTART_DT IS NULL OR TRIM(cur.SSTART_DT) = '' OR cur.SSTART_DT = '--'
+		                      OR cur.SSTART_DT <![CDATA[ <= ]]> TO_CHAR(LOCALTIMESTAMP, 'YYYY-MM-DD') )
+		                AND ( cur.SNULL_DT IS NULL OR TRIM(cur.SNULL_DT) = '' OR cur.SNULL_DT = '--'
+		                      OR cur.SNULL_DT <![CDATA[ >= ]]> TO_CHAR(LOCALTIMESTAMP, 'YYYY-MM-DD') ) )
+		<!-- 숨김구분 제외 — Prom_SQL excludeHiddenGubun 의 P 판 -->
+		AND NOT EXISTS ( SELECT 1 FROM COMTCCMMNDETAILCODE hg
+		                  WHERE hg.CODE_ID = 'SGUBUN' AND hg.CODE = P.SGUBUN_ID AND hg.USE_AT = 'N' )
+		<!-- 삭제분류 제외 — Prom_SQL excludeDeletedCate 의 P 판(현행분류가 삭제분류의 자손-또는-자신이면 배제) -->
+		AND ( P.ILAW_ID IS NULL OR P.ILAW_ID NOT IN (
+			SELECT lcd.ILAW_ID FROM <include refid="lawCurCateAggRW"/> lcd
+			 WHERE lcd.CUR_CATE IN ( SELECT dtd.ICATE_NO FROM ( WITH RECURSIVE crd AS (
+			                             SELECT dd.ICATE_NO FROM TB_CATE dd WHERE dd.SDEL_YN = 'Y'
+			                             UNION ALL
+			                             SELECT ch.ICATE_NO FROM TB_CATE ch JOIN crd ON ch.IREF = crd.ICATE_NO )
+			                             SELECT ICATE_NO FROM crd ) dtd ) ) )
+		AND ( ( P.ILAW_ID IS NULL OR P.ILAW_ID NOT IN (
+				SELECT lcr.ILAW_ID FROM <include refid="lawCurCateAggRW"/> lcr
+				 WHERE lcr.CUR_CATE IN (
+				       SELECT rr.ICATE_NO FROM TB_CATE_READER rr
+				       UNION
+				       SELECT dt1.ICATE_NO FROM ( WITH RECURSIVE cr1 AS (
+				           SELECT ca.ICATE_NO FROM TB_CATE ca
+				            WHERE ca.ICATE_NO IN ( SELECT r.ICATE_NO FROM TB_CATE_READER r WHERE r.INHERIT_YN = 'Y' )
+				           UNION ALL
+				           SELECT ch.ICATE_NO FROM TB_CATE ch JOIN cr1 ON ch.IREF = cr1.ICATE_NO )
+				           SELECT ICATE_NO FROM cr1 ) dt1 )
+				    OR lcr.CUR_GUBUN IN ( SELECT gg.SGUBUN_ID FROM TB_GUBUN_READER gg ) ) )
+		   OR P.ILAW_ID IN (
+				SELECT lca.ILAW_ID FROM <include refid="lawCurCateAggRW"/> lca
+				 WHERE lca.CUR_CATE IN (
+				       SELECT rm.ICATE_NO FROM TB_CATE_READER rm
+				        WHERE ( ( rm.READER_TY = 'USER' AND rm.READER_ID = #{readerEsntlId} )
+				             OR ( rm.READER_TY = 'DEPT' AND rm.READER_ID = #{readerOrgnztId} ) )
+				       UNION
+				       SELECT dt2.ICATE_NO FROM ( WITH RECURSIVE cr2 AS (
+				           SELECT cm.ICATE_NO FROM TB_CATE cm
+				            WHERE cm.ICATE_NO IN ( SELECT r2.ICATE_NO FROM TB_CATE_READER r2
+				                                    WHERE r2.INHERIT_YN = 'Y'
+				                                      AND ( ( r2.READER_TY = 'USER' AND r2.READER_ID = #{readerEsntlId} )
+				                                         OR ( r2.READER_TY = 'DEPT' AND r2.READER_ID = #{readerOrgnztId} ) ) )
+				           UNION ALL
+				           SELECT ch.ICATE_NO FROM TB_CATE ch JOIN cr2 ON ch.IREF = cr2.ICATE_NO )
+				           SELECT ICATE_NO FROM cr2 ) dt2 )
+				    OR lca.CUR_GUBUN IN (
+				       SELECT g2.SGUBUN_ID FROM TB_GUBUN_READER g2
+				        WHERE ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{readerEsntlId} )
+				             OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{readerOrgnztId} ) ) ) ) )
+		</if>
+	</sql>
+
+	<!--
+	  자체변환 평문(SSEARCH_TEXT) 전문검색.
+	   - 본문검색(TB_PROV_VRSN)은 Oracle Text(CONTAINS)지만, TB_REL_WORD 엔 FT 인덱스가 없어
+	     LIKE 사용(자체변환 대상이 소량이라 허용). 대소문자 무시(UPPER). 단일시스템이라 SSYS_ID 미필터.
+	   - TB_REL_WORD → TB_REL_VRSN(IPROM_NO) → TB_PROM. 비삭제 + 변환된(SSEARCH_TEXT NOT NULL) 행만.
+	   - 스니펫=앞 200자, 최신순 최대 50건.
+	   - read-게이트(2026-07-10): 비면제 사용자는 열람제한(분류/구분) + 현행회차 존재·draft 상한·유효기간 +
+	     숨김구분 제외 + 삭제분류 제외 통과분만(UnifiedSearch 자료축 정합) — 열람제한/draft 규정의 관련문서
+	     제목/스니펫 누설 봉합. 면제 3역할은 applyReadGate=false 로 전량 노출(기존 동일).
+	-->
+	<select id="searchByText" resultType="java.util.LinkedHashMap">
+		SELECT P.IPROM_NO  AS "promNo",
+		       P.STITLE    AS "promTitle",
+		       P.ILAW_NO   AS "lawNo",
+		       W.IRWORD_NO AS "relWordNo",
+		       W.STITLE    AS "docTitle",
+		       SUBSTRING(W.SSEARCH_TEXT, 1, 200) AS "snippet"
+		  FROM TB_REL_WORD W
+		  JOIN TB_REL_VRSN V ON W.IRVRSN_NO = V.IRVRSN_NO
+		  JOIN TB_PROM     P ON V.IPROM_NO  = P.IPROM_NO
+		 WHERE W.SDEL_YN = 'N'
+		   AND W.SSEARCH_TEXT IS NOT NULL
+		   <![CDATA[ AND UPPER(W.SSEARCH_TEXT) LIKE UPPER('%' || #{keyword} || '%') ]]>
+		<include refid="cateReadGateRW"/>
+		 ORDER BY W.IRWORD_NO DESC
+		 LIMIT 50
+	</select>
+
+</mapper>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelHtml_SQL_postgres.xml
+
+  관련자료 — HTML 액션 자식(TB_REL_HTML) MyBatis 매핑.
+   - 활성(SDEL_YN='N') 만 조회.
+   - SHTML 은 CLOB → jdbcType=CLOB (String typeHandler 자동).
+   - 파일/첨부 조인 없음.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelHtmlMapper">
+
+	<resultMap id="relHtmlResult" type="narainet.rlms.related.service.RelHtmlVO">
+		<result property="relHtmlNo" column="IRHTML_NO"/>
+		<result property="relVrsnNo" column="IRVRSN_NO"/>
+		<result property="title"     column="STITLE"/>
+		<result property="html"      column="SHTML"/>
+		<result property="delYn"     column="SDEL_YN"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="sysId"     column="SSYS_ID"/>
+	</resultMap>
+
+	<sql id="relHtmlCols">
+		H.IRHTML_NO, H.IRVRSN_NO, H.STITLE, H.SHTML, H.SDEL_YN, H.SINS_DT, H.SSYS_ID
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relHtmlResult">
+		SELECT <include refid="relHtmlCols"/>
+		  FROM TB_REL_HTML H
+		 WHERE H.IRVRSN_NO = #{relVrsnNo}
+		   AND H.SDEL_YN   = 'N'
+		 ORDER BY H.IRHTML_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relHtmlResult">
+		SELECT <include refid="relHtmlCols"/>
+		  FROM TB_REL_HTML H
+		 WHERE H.IRHTML_NO = #{relHtmlNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelHtmlVO">
+		INSERT INTO TB_REL_HTML (
+			IRHTML_NO, IRVRSN_NO, STITLE, SHTML, SDEL_YN, SINS_DT
+		) VALUES (
+			#{relHtmlNo},
+			#{relVrsnNo},
+			#{title,jdbcType=VARCHAR},
+			#{html},
+			#{delYn,jdbcType=VARCHAR},
+			#{insDt,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelHtmlVO">
+		UPDATE TB_REL_HTML
+		   SET STITLE = #{title,jdbcType=VARCHAR},
+		       SHTML  = #{html}
+		 WHERE IRHTML_NO = #{relHtmlNo}
+	</update>
+
+	<update id="softDelete">
+		UPDATE TB_REL_HTML SET SDEL_YN = 'Y' WHERE IRHTML_NO = #{relHtmlNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_HTML WHERE IRHTML_NO = #{relHtmlNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_HTML WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+</mapper>

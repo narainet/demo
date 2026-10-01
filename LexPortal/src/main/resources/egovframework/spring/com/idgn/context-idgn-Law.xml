@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <!-- 송무(law) 옵션 모듈 채번 17종 — COMTECOPSEQ (rlms_law_install.sql 시드).
+         LAW_COURT_ID 는 200, LAW_CALC_RATE_ID 는 100 부터(시드 행이 선점한 ID 회피). -->
+
+    <bean name="egovLawSuitIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_SUIT_ID"/>
+    </bean>
+    <bean name="egovLawPartyIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_PARTY_ID"/>
+    </bean>
+    <bean name="egovLawStaffIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_STAFF_ID"/>
+    </bean>
+    <bean name="egovLawLandIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_LAND_ID"/>
+    </bean>
+    <bean name="egovLawProgIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_PROG_ID"/>
+    </bean>
+    <bean name="egovLawRsltHistIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_RSLT_HIST_ID"/>
+    </bean>
+    <bean name="egovLawDocIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_DOC_ID"/>
+    </bean>
+    <bean name="egovLawCostIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_COST_ID"/>
+    </bean>
+    <bean name="egovLawLawyerIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_LAWYER_ID"/>
+    </bean>
+    <bean name="egovLawAssignIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_ASSIGN_ID"/>
+    </bean>
+    <bean name="egovLawCourtIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_COURT_ID"/>
+    </bean>
+    <bean name="egovLawReqIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_REQ_ID"/>
+    </bean>
+    <bean name="egovLawReqHistIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_REQ_HIST_ID"/>
+    </bean>
+    <bean name="egovLawReqHelperIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_REQ_HELPER_ID"/>
+    </bean>
+    <bean name="egovLawSeizeIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_SEIZE_ID"/>
+    </bean>
+    <bean name="egovLawReceiptIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_RECEIPT_ID"/>
+    </bean>
+    <bean name="egovLawCalcRateIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAW_CALC_RATE_ID"/>
+    </bean>
+
+</beans>

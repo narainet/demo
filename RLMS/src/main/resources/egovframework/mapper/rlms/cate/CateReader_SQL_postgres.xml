@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/cate/CateReader_SQL_postgres.xml
+
+  분류별 열람제한 TB_CATE_READER 매핑 (TB_CATE_OWNER 패턴 미러, read 축).
+   - 열람대상 N명(부서/개인). 표시명은 COMTNORGNZTINFO / COMVNUSERMASTER 에서 해석.
+   - 미지정 분류 = 전체 공개. 지정 시 해당 부서/개인만 열람.
+   - 가드(countReadBlock): 적용 가능한 제한행(자기분류 직접 OR 조상 상속) 존재 + 본인 매칭 없음 = 차단.
+     조상 = IREF CONNECT BY 상향. IREF_LV_* 는 미사용(0).
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.cate.mapper.CateReaderMapper">
+
+	<resultMap id="cateReaderResult" type="narainet.rlms.cate.service.CateReaderVO">
+		<result property="cateNo"    column="ICATE_NO"/>
+		<result property="readerTy"  column="READER_TY"/>
+		<result property="readerId"  column="READER_ID"/>
+		<result property="inheritYn" column="INHERIT_YN"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="insId"     column="SINS_ID"/>
+		<result property="readerNm"  column="READER_NM"/>
+		<result property="cateNm"    column="CATE_NM"/>
+	</resultMap>
+
+	<resultMap id="gubunReaderResult" type="narainet.rlms.cate.service.CateReaderVO">
+		<result property="gubunId"   column="SGUBUN_ID"/>
+		<result property="readerTy"  column="READER_TY"/>
+		<result property="readerId"  column="READER_ID"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="insId"     column="SINS_ID"/>
+		<result property="readerNm"  column="READER_NM"/>
+	</resultMap>
+
+	<!-- 특정 분류의 열람대상 목록 (표시명 해석) -->
+	<select id="selectReadersByCate" resultMap="cateReaderResult">
+		SELECT o.ICATE_NO, o.READER_TY, o.READER_ID, o.INHERIT_YN, o.SINS_DT, o.SINS_ID,
+		       CASE o.READER_TY
+		         WHEN 'DEPT' THEN (SELECT g.ORGNZT_NM FROM COMTNORGNZTINFO g WHERE g.ORGNZT_ID = o.READER_ID)
+		         WHEN 'USER' THEN (SELECT u.USER_NM   FROM COMVNUSERMASTER u WHERE u.ESNTL_ID  = o.READER_ID)
+		       END AS READER_NM,
+		       (SELECT c.SNAME FROM TB_CATE c WHERE c.ICATE_NO = o.ICATE_NO) AS CATE_NM
+		FROM   TB_CATE_READER o
+		WHERE  o.ICATE_NO = #{cateNo}
+		ORDER BY o.READER_TY, READER_NM
+	</select>
+
+	<!-- 열람대상 추가 -->
+	<insert id="insertReader" parameterType="narainet.rlms.cate.service.CateReaderVO">
+		INSERT INTO TB_CATE_READER (ICATE_NO, READER_TY, READER_ID, INHERIT_YN, SINS_DT, SINS_ID)
+		VALUES ( #{cateNo}, #{readerTy}, #{readerId},
+		         COALESCE(#{inheritYn}, 'Y'),
+		         TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS'),
+		         #{insId} )
+	</insert>
+
+	<!-- 열람대상 삭제 (PK 단건) -->
+	<delete id="deleteReader">
+		DELETE FROM TB_CATE_READER
+		WHERE  ICATE_NO = #{cateNo}
+		AND    READER_TY = #{readerTy}
+		AND    READER_ID = #{readerId}
+	</delete>
+
+	<!-- PK 존재 여부 (중복 추가 방지) -->
+	<select id="countReader" resultType="int">
+		SELECT COUNT(*) FROM TB_CATE_READER
+		WHERE  ICATE_NO = #{cateNo}
+		AND    READER_TY = #{readerTy}
+		AND    READER_ID = #{readerId}
+	</select>
+
+	<!-- ESNTL_ID 실존 여부 — 개인 열람대상 오타 방어 (열람 제한은 오타 시 전면 차단이라 등록 시점 검증 필수) -->
+	<select id="countUserExists" resultType="int">
+		SELECT COUNT(*) FROM COMVNUSERMASTER WHERE ESNTL_ID = #{esntlId}
+	</select>
+
+	<!-- 사용자 검색 — 이름/로그인ID 부분일치 (개인 열람대상 선택 UI, 최대 20) -->
+	<select id="selectUserSearch" resultType="java.util.LinkedHashMap">
+		SELECT * FROM (
+			SELECT u.ESNTL_ID AS "esntlId", u.USER_ID AS "userId", u.USER_NM AS "userNm",
+			       (SELECT g.ORGNZT_NM FROM COMTNORGNZTINFO g WHERE g.ORGNZT_ID = u.ORGNZT_ID) AS "orgnztNm"
+			  FROM COMVNUSERMASTER u
+			 WHERE UPPER(u.USER_NM) LIKE '%' || UPPER(#{keyword}) || '%'
+			    OR UPPER(u.USER_ID) LIKE '%' || UPPER(#{keyword}) || '%'
+			 ORDER BY u.USER_NM, u.USER_ID
+		) X <![CDATA[ LIMIT 20 ]]>
+	</select>
+
+	<!-- ═══ 구분(최상위 SGUBUN_ID) 단위 열람제한 (TB_GUBUN_READER) — 상속 개념 없음(항상 구분 전체) ═══ -->
+
+	<select id="selectGubunReaders" resultMap="gubunReaderResult">
+		SELECT o.SGUBUN_ID, o.READER_TY, o.READER_ID, o.SINS_DT, o.SINS_ID,
+		       CASE o.READER_TY
+		         WHEN 'DEPT' THEN (SELECT g.ORGNZT_NM FROM COMTNORGNZTINFO g WHERE g.ORGNZT_ID = o.READER_ID)
+		         WHEN 'USER' THEN (SELECT u.USER_NM   FROM COMVNUSERMASTER u WHERE u.ESNTL_ID  = o.READER_ID)
+		       END AS READER_NM
+		FROM   TB_GUBUN_READER o
+		WHERE  o.SGUBUN_ID = #{gubunId}
+		ORDER BY o.READER_TY, READER_NM
+	</select>
+
+	<insert id="insertGubunReader" parameterType="narainet.rlms.cate.service.CateReaderVO">
+		INSERT INTO TB_GUBUN_READER (SGUBUN_ID, READER_TY, READER_ID, SINS_DT, SINS_ID)
+		VALUES ( #{gubunId}, #{readerTy}, #{readerId},
+		         TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS'),
+		         #{insId} )
+	</insert>
+
+	<delete id="deleteGubunReader">
+		DELETE FROM TB_GUBUN_READER
+		WHERE  SGUBUN_ID = #{gubunId}
+		AND    READER_TY = #{readerTy}
+		AND    READER_ID = #{readerId}
+	</delete>
+
+	<select id="countGubunReader" resultType="int">
+		SELECT COUNT(*) FROM TB_GUBUN_READER
+		WHERE  SGUBUN_ID = #{gubunId}
+		AND    READER_TY = #{readerTy}
+		AND    READER_ID = #{readerId}
+	</select>
+
+	<!-- 적용 가능한 제한행: 자기분류 직접 제한 OR 조상분류의 상속(INHERIT_YN='Y') 제한 -->
+	<sql id="applicableReaders">
+		r.ICATE_NO IN (
+		  WITH RECURSIVE anc AS (
+		    SELECT a.ICATE_NO, a.IREF FROM TB_CATE a WHERE a.ICATE_NO = #{cateNo}
+		    UNION ALL
+		    SELECT pa.ICATE_NO, pa.IREF FROM TB_CATE pa JOIN anc ON pa.ICATE_NO = anc.IREF )
+		  SELECT ICATE_NO FROM anc
+		)
+		AND ( r.ICATE_NO = #{cateNo} OR r.INHERIT_YN = 'Y' )
+	</sql>
+
+	<!-- 열람차단 가드 — 결과>0 이면 차단. 제한 미지정(분류 계열+구분 모두 無)은 0(공개).
+	     차단 = (분류 계열 제한 존재 OR 구분 제한 존재) AND 분류 매칭 없음 AND 구분 매칭 없음 (OR 결합). -->
+	<select id="countReadBlock" resultType="int">
+		SELECT COUNT(*)
+		WHERE ( EXISTS (
+		          SELECT 1 FROM TB_CATE_READER r
+		          WHERE <include refid="applicableReaders"/>
+		        )
+		     OR EXISTS (
+		          SELECT 1 FROM TB_GUBUN_READER g
+		          WHERE g.SGUBUN_ID = ( SELECT c.SGUBUN_ID FROM TB_CATE c WHERE c.ICATE_NO = #{cateNo} )
+		        ) )
+		  AND NOT EXISTS (
+		        SELECT 1 FROM TB_CATE_READER r
+		        WHERE <include refid="applicableReaders"/>
+		        AND ( ( r.READER_TY = 'USER' AND r.READER_ID = #{esntlId} )
+		           OR ( r.READER_TY = 'DEPT' AND r.READER_ID = #{orgnztId} ) )
+		      )
+		  AND NOT EXISTS (
+		        SELECT 1 FROM TB_GUBUN_READER g2
+		        WHERE g2.SGUBUN_ID = ( SELECT c2.SGUBUN_ID FROM TB_CATE c2 WHERE c2.ICATE_NO = #{cateNo} )
+		        AND ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{esntlId} )
+		           OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{orgnztId} ) )
+		      )
+	</select>
+
+	<!-- 차단 분류번호 전체 (트리 필터용).
+	     삭제분류(SDEL_YN='Y')도 포함 — 삭제분류에 매달린 현행규정이 트리 '(미분류)' 폴백으로
+	     새어나가는 것을 막으려면 삭제분류의 차단 여부도 집합에 있어야 함. -->
+	<select id="selectBlockedCateNos" resultType="long">
+		<!-- Oracle 행상관 CONNECT BY(조상 상향) → 전 노드 (NODE, ANC=조상-또는-자신) 폐쇄집합 CTE 1회 계산 후 조인.
+		     재귀 CTE 는 외부행 상관이 불가해 폐쇄집합 방식이 등가·유일해법(분류표는 소형이라 비용 무시 가능) -->
+		WITH RECURSIVE cate_anc (NODE, ANC, ANC_REF) AS (
+			SELECT c0.ICATE_NO, c0.ICATE_NO, c0.IREF FROM TB_CATE c0
+			UNION ALL
+			SELECT ca.NODE, pa.ICATE_NO, pa.IREF FROM cate_anc ca JOIN TB_CATE pa ON pa.ICATE_NO = ca.ANC_REF )
+		SELECT c.ICATE_NO
+		FROM   TB_CATE c
+		WHERE  ( EXISTS (
+		           SELECT 1 FROM TB_CATE_READER r
+		           WHERE  r.ICATE_NO IN ( SELECT ca1.ANC FROM cate_anc ca1 WHERE ca1.NODE = c.ICATE_NO )
+		           AND    ( r.ICATE_NO = c.ICATE_NO OR r.INHERIT_YN = 'Y' ) )
+		      OR EXISTS (
+		           SELECT 1 FROM TB_GUBUN_READER g WHERE g.SGUBUN_ID = c.SGUBUN_ID ) )
+		AND    NOT EXISTS (
+		         SELECT 1 FROM TB_CATE_READER r
+		         WHERE  r.ICATE_NO IN ( SELECT ca2.ANC FROM cate_anc ca2 WHERE ca2.NODE = c.ICATE_NO )
+		         AND    ( r.ICATE_NO = c.ICATE_NO OR r.INHERIT_YN = 'Y' )
+		         AND    ( ( r.READER_TY = 'USER' AND r.READER_ID = #{esntlId} )
+		                OR ( r.READER_TY = 'DEPT' AND r.READER_ID = #{orgnztId} ) ) )
+		AND    NOT EXISTS (
+		         SELECT 1 FROM TB_GUBUN_READER g2
+		         WHERE  g2.SGUBUN_ID = c.SGUBUN_ID
+		         AND    ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{esntlId} )
+		                OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{orgnztId} ) ) )
+	</select>
+
+	<!-- 차단 규정번호 전체 (기능별분류 트리 필터용)
+	     분류 단위로 차단 판정 후 '법령(ILAW_ID) 단위'로 전 회차 전개 — 어느 회차라도 차단분류 소속이면
+	     그 법령의 모든 회차 번호를 차단(보수적 유니온). 기능별분류 leaf 는 등록 당시 회차 스냅샷이라
+	     회차 간 분류가 갈라진 이력 데이터에서도 제목 노출이 없도록 법령 단위로 매칭.
+	     삭제분류(SDEL_YN='Y')에 매달린 규정도 포함. -->
+	<select id="selectBlockedPromNos" resultType="long">
+		<!-- 조상 상향 상관 CONNECT BY → 폐쇄집합 CTE (selectBlockedCateNos 와 동일 기법) -->
+		WITH RECURSIVE cate_anc (NODE, ANC, ANC_REF) AS (
+			SELECT c0.ICATE_NO, c0.ICATE_NO, c0.IREF FROM TB_CATE c0
+			UNION ALL
+			SELECT ca.NODE, pa.ICATE_NO, pa.IREF FROM cate_anc ca JOIN TB_CATE pa ON pa.ICATE_NO = ca.ANC_REF )
+		SELECT p2.IPROM_NO
+		FROM   TB_PROM p2
+		WHERE  p2.ILAW_ID IN ( SELECT p.ILAW_ID FROM TB_PROM p WHERE p.ICATE_NO IN (
+		         SELECT c.ICATE_NO
+		         FROM   TB_CATE c
+		         WHERE  ( EXISTS (
+		                    SELECT 1 FROM TB_CATE_READER r
+		                    WHERE  r.ICATE_NO IN ( SELECT ca1.ANC FROM cate_anc ca1 WHERE ca1.NODE = c.ICATE_NO )
+		                    AND    ( r.ICATE_NO = c.ICATE_NO OR r.INHERIT_YN = 'Y' ) )
+		               OR EXISTS (
+		                    SELECT 1 FROM TB_GUBUN_READER g WHERE g.SGUBUN_ID = c.SGUBUN_ID ) )
+		         AND    NOT EXISTS (
+		                  SELECT 1 FROM TB_CATE_READER r
+		                  WHERE  r.ICATE_NO IN ( SELECT ca2.ANC FROM cate_anc ca2 WHERE ca2.NODE = c.ICATE_NO )
+		                  AND    ( r.ICATE_NO = c.ICATE_NO OR r.INHERIT_YN = 'Y' )
+		                  AND    ( ( r.READER_TY = 'USER' AND r.READER_ID = #{esntlId} )
+		                         OR ( r.READER_TY = 'DEPT' AND r.READER_ID = #{orgnztId} ) ) )
+		         AND    NOT EXISTS (
+		                  SELECT 1 FROM TB_GUBUN_READER g2
+		                  WHERE  g2.SGUBUN_ID = c.SGUBUN_ID
+		                  AND    ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{esntlId} )
+		                         OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{orgnztId} ) ) )
+		       ) )
+	</select>
+
+</mapper>

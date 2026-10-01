@@ -1,0 +1,981 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/prom/Prom_SQL_oracle.xml
+
+  법령(TB_PROM) MyBatis 매핑.
+   - namespace = @Mapper 인터페이스 FQN
+   - Oracle 페이징: rownum 서브쿼리
+   - GET_FULL_NAME_BY_CATE_NO 함수 호출하여 분류 전체경로 조립
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.prom.mapper.PromMapper">
+
+	<resultMap id="promResult" type="narainet.rlms.prom.service.PromVO">
+		<result property="promNo"          column="IPROM_NO"/>
+		<result property="gubunId"         column="SGUBUN_ID"/>
+		<result property="cateNo"          column="ICATE_NO"/>
+		<result property="gaejungNo"       column="IGAEJUNG_NO"/>
+		<result property="lawId"           column="ILAW_ID"/>
+		<result property="lawNo"           column="ILAW_NO"/>
+		<result property="buseoNo"         column="IBUSEO_NO"/>
+		<result property="buseoOrgnztId"   column="SBUSEO_ORGNZT_ID"/>
+		<result property="sysId"           column="SSYS_ID"/>
+		<result property="title"           column="STITLE"/>
+		<result property="subTitle"        column="SSUB_TITLE"/>
+		<result property="number"          column="SNUM"/>
+		<result property="party"           column="SPARTY"/>
+		<result property="promDate"        column="SPROM_DT"/>
+		<result property="startDate"       column="SSTART_DT"/>
+		<result property="nullDate"        column="SNULL_DT"/>
+		<result property="nullDatePend"    column="SNULL_DT_PEND"/>
+		<result property="insDt"           column="SINS_DT"/>
+		<result property="reason"          column="SREASON"          jdbcType="CLOB"/>
+		<result property="gaejung"         column="SGAEJUNG"         jdbcType="CLOB"/>
+		<result property="bylaw"           column="SBYLAW"           jdbcType="CLOB"/>
+		<result property="preamble"        column="SPREAMBLE"        jdbcType="CLOB"/>
+		<result property="searchText"      column="SSEARCH_TEXT"     jdbcType="CLOB"/>
+		<result property="url"             column="SURL"/>
+		<result property="provFlag"        column="SPROV_FG"/>
+		<result property="provStyleCd"     column="SPROV_STYLE_CD"/>
+		<result property="provFileNo"      column="SPROV_FILE_NO"/>
+		<result property="dispYn"          column="SDISP_YN"/>
+		<result property="existingYn"      column="SEXISTING_YN"/>
+		<result property="extDispYn"       column="SEXT_DISP_YN"/>
+		<result property="dplItemYn"       column="SDPL_ITEM_YN"/>
+		<result property="relFileViewYn"   column="SREL_FILE_VIEW_YN"/>
+		<result property="stsfdgYn"        column="SSTSFDG_YN"/>
+		<result property="status"          column="SSTATUS"/>
+		<result property="seq"             column="ISEQ"/>
+		<result property="orderIdx"        column="SORDERIDX"/>
+		<!-- (2026-07-30) SSTOR_FILE_* 7종 매핑 제거 — 컬럼 DROP. 원본 문서는 exportProm.do 로 실시간 생성 -->
+		<!-- 조회 부가 -->
+		<result property="cateNm"          column="CATE_NM"/>
+		<result property="cateFullNm"      column="CATE_FULL_NM"/>
+		<result property="buseoNm"         column="BUSEO_NM"/>
+		<result property="gaejungNm"       column="GAEJUNG_NM"/>
+		<result property="workStatus"      column="WORK_STATUS"/>
+	</resultMap>
+
+	<!-- 컬럼 select 절 재사용 -->
+	<sql id="promColumns">
+		p.IPROM_NO, p.SGUBUN_ID, p.ICATE_NO, p.IGAEJUNG_NO, p.ILAW_ID, p.ILAW_NO,
+		p.IBUSEO_NO, p.SBUSEO_ORGNZT_ID, p.SSYS_ID, p.STITLE, p.SSUB_TITLE, p.SNUM, p.SPARTY,
+		<!-- SINS_DT 는 초까지 저장된 문자열. 화면에는 분까지만 보이면 되므로 조회 결과만 자른다
+		     (저장값·ORDER BY·TO_DATE 비교는 원본 컬럼 그대로 — 2026-07-31). -->
+		p.SPROM_DT, p.SSTART_DT, p.SNULL_DT, p.SNULL_DT_PEND, SUBSTR(p.SINS_DT, 1, 16) AS SINS_DT,
+		p.SREASON, p.SGAEJUNG, p.SBYLAW, p.SPREAMBLE, p.SSEARCH_TEXT,
+		p.SURL, p.SPROV_FG, p.SPROV_STYLE_CD, p.SPROV_FILE_NO,
+		p.SDISP_YN, p.SEXISTING_YN, p.SEXT_DISP_YN, p.SDPL_ITEM_YN, p.SREL_FILE_VIEW_YN, p.SSTSFDG_YN,
+		p.SSTATUS, p.ISEQ, p.SORDERIDX
+	</sql>
+
+	<!-- ============================================================ -->
+	<!-- 조회                                                          -->
+	<!-- ============================================================ -->
+
+	<select id="selectPromList" parameterType="narainet.rlms.prom.service.PromVO"
+			resultMap="promResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				c.SNAME AS CATE_NM,
+				GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+				b.ORGNZT_NM AS BUSEO_NM
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE p.SEXISTING_YN = 'Y'
+			<if test="cateNo != null">
+			   AND p.ICATE_NO = #{cateNo}
+			</if>
+			<if test="gubunId != null and gubunId != ''">
+			   AND p.SGUBUN_ID = #{gubunId}
+			</if>
+			<if test="searchKeyword != null and searchKeyword != ''">
+				<choose>
+					<when test="searchCnd == '0'">
+			   AND UPPER(p.STITLE) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+					</when>
+					<when test="searchCnd == '1'">
+			   <![CDATA[ AND DBMS_LOB.INSTR(p.SSEARCH_TEXT, #{searchKeyword}) > 0 ]]>
+					</when>
+					<when test="searchCnd == '2'">
+			   AND UPPER(c.SNAME) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+					</when>
+					<when test="searchCnd == '3'">
+			   AND UPPER(b.ORGNZT_NM) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+					</when>
+					<otherwise>
+			   AND UPPER(p.STITLE) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+					</otherwise>
+				</choose>
+			</if>
+			<include refid="cateReadGate"/>
+			 ORDER BY p.ISEQ, p.SORDERIDX, p.IPROM_NO DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectPromListCnt" parameterType="narainet.rlms.prom.service.PromVO"
+			resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SEXISTING_YN = 'Y'
+		<if test="cateNo != null">
+		   AND p.ICATE_NO = #{cateNo}
+		</if>
+		<if test="gubunId != null and gubunId != ''">
+		   AND p.SGUBUN_ID = #{gubunId}
+		</if>
+		<if test="searchKeyword != null and searchKeyword != ''">
+			<choose>
+				<when test="searchCnd == '0'">
+		   AND UPPER(p.STITLE) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</when>
+				<when test="searchCnd == '1'">
+		   <![CDATA[ AND DBMS_LOB.INSTR(p.SSEARCH_TEXT, #{searchKeyword}) > 0 ]]>
+				</when>
+				<when test="searchCnd == '2'">
+		   AND UPPER(c.SNAME) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</when>
+				<when test="searchCnd == '3'">
+		   AND UPPER(b.ORGNZT_NM) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</when>
+				<otherwise>
+		   AND UPPER(p.STITLE) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</otherwise>
+			</choose>
+		</if>
+		<include refid="cateReadGate"/>
+	</select>
+
+	<select id="selectPromByNo" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			c.SNAME AS CATE_NM,
+			GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+			b.ORGNZT_NM AS BUSEO_NM,
+			g.SNAME AS GAEJUNG_NM
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE    c ON p.ICATE_NO    = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		  LEFT OUTER JOIN TB_GAEJUNG g ON p.IGAEJUNG_NO = g.IGAEJUNG_NO
+		 WHERE p.IPROM_NO = #{promNo}
+	</select>
+
+	<!-- ── 폐지일 변경 승인 게이트 (2026-07-20 사용자 결정) ──
+	     현행 회차의 SNULL_DT 변경은 즉시 반영하지 않고 SNULL_DT_PEND 에 보관 + 승인요청 자동 생성.
+	     승인 시 apply(PEND→본값), 반려 시 clear(PEND 폐기). PEND NULL = 대기 없음, 미폐지 센티넬(대시 2개) = 해제 대기.
+	     ※ XML 주석에 대시 연속 2개 리터럴 금지(SAX 오류로 기동 전멸 — 2026-07-20 실사고) -->
+	<update id="updatePromNullDatePend">
+		UPDATE TB_PROM SET SNULL_DT_PEND = #{pend,jdbcType=VARCHAR} WHERE IPROM_NO = #{promNo}
+	</update>
+
+	<update id="applyPendingNullDate">
+		UPDATE TB_PROM SET SNULL_DT = SNULL_DT_PEND, SNULL_DT_PEND = NULL
+		 WHERE IPROM_NO = #{promNo} AND SNULL_DT_PEND IS NOT NULL
+	</update>
+
+	<update id="clearPendingNullDate">
+		UPDATE TB_PROM SET SNULL_DT_PEND = NULL
+		 WHERE IPROM_NO = #{promNo} AND SNULL_DT_PEND IS NOT NULL
+	</update>
+
+	<!-- 법령의 최신 회차 분류번호 — 열람제한 가드 경량 판정용 (promColumns CLOB 미로드) -->
+	<select id="selectLatestCateNoByLawId" resultType="java.lang.Long">
+		SELECT ICATE_NO FROM (
+			SELECT p.ICATE_NO
+			  FROM TB_PROM p
+			 WHERE p.ILAW_ID = #{lawId}
+			 ORDER BY p.ILAW_NO DESC, p.IPROM_NO DESC
+		) WHERE ROWNUM = 1
+	</select>
+
+	<select id="selectPromListByLawId" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			NULL AS CATE_NM, NULL AS CATE_FULL_NM, NULL AS BUSEO_NM,
+			g.SNAME AS GAEJUNG_NM,
+			( SELECT w.SSTATUS FROM TB_PROM_WRK w
+			   WHERE w.IPROM_NO = p.IPROM_NO
+			     AND w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2 WHERE w2.IPROM_NO = p.IPROM_NO )
+			) AS WORK_STATUS
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_GAEJUNG g ON p.IGAEJUNG_NO = g.IGAEJUNG_NO
+		 WHERE p.ILAW_ID = #{lawId}
+		 ORDER BY p.ILAW_NO DESC, p.IPROM_NO DESC
+	</select>
+
+	<!-- 작업중 draft 회차(연혁번호) — 새 연혁(개정) 등록 차단 판정.
+	     draft = SEXISTING_YN='N' + 최신 워크상태 편집중/승인요청/승인반려 (excludeUnapprovedDraft 와 동일 기준).
+	     ★SEXISTING_YN='N' 단독 판정 금지 — 승인 시 전 회차가 'N' 강등되므로 과거 승인본을
+	       draft 로 오판해 다회차 법령의 개정 등록이 영구 차단됐음 (2026-07-09 교정). -->
+	<select id="selectWorkingDraftLawNos" resultType="long">
+		SELECT p.ILAW_NO
+		  FROM TB_PROM p
+		 WHERE p.ILAW_ID = #{lawId}
+		   AND NVL(p.SEXISTING_YN, 'N') = 'N'
+		   AND NVL(p.SDISP_YN, 'Y') != 'N'
+		   AND EXISTS (
+		       SELECT 1 FROM TB_PROM_WRK dw
+		        WHERE dw.IPROM_NO = p.IPROM_NO
+		          AND dw.IPWRK_NO = ( SELECT MAX(dw2.IPWRK_NO) FROM TB_PROM_WRK dw2 WHERE dw2.IPROM_NO = p.IPROM_NO )
+		          AND dw.SSTATUS IN ('편집중', '승인요청', '승인반려')
+		   )
+		 ORDER BY p.ILAW_NO DESC
+	</select>
+
+	<!-- 단건 작업중 draft 판정 — front 뷰어/트리의 비편집계 draft 게이트 (selectWorkingDraftLawNos 와 동일 기준) -->
+	<select id="countWorkingDraftByPromNo" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		 WHERE p.IPROM_NO = #{promNo}
+		   AND NVL(p.SEXISTING_YN, 'N') = 'N'
+		   AND EXISTS (
+		       SELECT 1 FROM TB_PROM_WRK dw
+		        WHERE dw.IPROM_NO = p.IPROM_NO
+		          AND dw.IPWRK_NO = ( SELECT MAX(dw2.IPWRK_NO) FROM TB_PROM_WRK dw2 WHERE dw2.IPROM_NO = p.IPROM_NO )
+		          AND dw.SSTATUS IN ('편집중', '승인요청', '승인반려')
+		   )
+	</select>
+
+	<!-- 소관부서 후보 — 표준 조직정보(COMTNORGNZTINFO). F1-5 전환(2026-06-11): TB_BUSEO 폐기, 표준 테이블이 원천.
+	     buseoNo 는 레거시 호환 역파생(이관분 ORG_+16자리 패턴일 때만 — 표준화면 자체 생성 행은 NULL). -->
+	<select id="selectOrgnztList" resultType="java.util.LinkedHashMap">
+		SELECT TRIM(o.ORGNZT_ID)             AS "orgnztId",
+		       o.ORGNZT_NM                   AS "buseoNm",
+		       NVL(o.ORGNZT_DC, o.ORGNZT_NM) AS "fullNm",
+		       CASE WHEN REGEXP_LIKE(o.ORGNZT_ID, '^ORG_[0-9]{16}$')
+		            THEN TO_NUMBER(SUBSTR(o.ORGNZT_ID, 5)) END AS "buseoNo"
+		  FROM COMTNORGNZTINFO o
+		<if test="keyword != null and keyword != ''">
+		 WHERE UPPER(o.ORGNZT_NM) LIKE '%' || UPPER(#{keyword}) || '%'
+		</if>
+		 ORDER BY o.ORGNZT_NM
+	</select>
+
+	<!-- 누적조회 하한 — 전면개정류(SDIFF_YN='N') 회차 중 lawNo 이하 최신. 레거시 getLawNoByNotDifference 1:1 -->
+	<select id="selectNotDiffLawNo" resultType="java.lang.Long">
+		SELECT MAX(p.ILAW_NO)
+		  FROM TB_PROM p
+		 WHERE p.ILAW_ID = #{lawId}
+		   AND p.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		   AND p.IGAEJUNG_NO IN ( SELECT g.IGAEJUNG_NO
+		                            FROM TB_GAEJUNG g
+		                           WHERE g.SDIFF_YN = 'N' AND g.SDEL_YN = 'N' )
+	</select>
+
+	<select id="selectPreviousProm" resultMap="promResult">
+		SELECT * FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				NULL AS CATE_NM, NULL AS CATE_FULL_NM, NULL AS BUSEO_NM
+			  FROM TB_PROM p
+			 WHERE p.ILAW_ID = (SELECT ILAW_ID FROM TB_PROM WHERE IPROM_NO = #{promNo})
+			   <![CDATA[ AND p.IPROM_NO < #{promNo} ]]>
+			 ORDER BY p.IPROM_NO DESC
+		) WHERE rownum = 1
+	</select>
+
+	<select id="selectMaxLawId" resultType="long">
+		SELECT NVL(MAX(ILAW_ID), 0) + 1 FROM TB_PROM
+	</select>
+
+	<!-- 같은 lawId(논리법령) 안에서 현재 최대 회차번호.
+	     실채번은 Service(insertProm/suggestNextLawNo): 제정=10, 개정=MAX+10 (레거시 파리티). -->
+	<select id="selectMaxLawNoByLawId" resultType="java.lang.Long">
+		SELECT MAX(ILAW_NO) FROM TB_PROM WHERE ILAW_ID = #{lawId}
+	</select>
+
+	<select id="selectMaxSeqByCate" resultType="int">
+		SELECT NVL(MAX(ISEQ), 0) + 1 FROM TB_PROM WHERE ICATE_NO = #{cateNo}
+	</select>
+
+	<!-- (2026-07-29 삭제) selectSearchHistoryList — searchHistory.do 전용 질의였는데
+	     그 핸들러가 화면 링크 없이 500 만 내던 죽은 엔드포인트라 함께 제거.
+	     사용자 연혁 검색 정본 = selectFrontHistoryList (/rlms/fulltext/historyList.do) -->
+
+	<!-- ============================================================ -->
+	<!-- 변경                                                          -->
+	<!-- ============================================================ -->
+
+	<insert id="insertProm" parameterType="narainet.rlms.prom.service.PromVO">
+		INSERT INTO TB_PROM (
+			IPROM_NO, SGUBUN_ID, ICATE_NO, IGAEJUNG_NO, SGAEJUNG_CODE, ILAW_ID, ILAW_NO,
+			IBUSEO_NO, SBUSEO_ORGNZT_ID, STITLE, SSUB_TITLE, SNUM, SPARTY,
+			SPROM_DT, SSTART_DT, SNULL_DT, SINS_DT,
+			SREASON, SGAEJUNG, SBYLAW, SPREAMBLE, SSEARCH_TEXT,
+			SURL, SPROV_FG, SPROV_STYLE_CD, SPROV_FILE_NO,
+			SDISP_YN, SEXISTING_YN, SEXT_DISP_YN, SDPL_ITEM_YN, SREL_FILE_VIEW_YN, SSTSFDG_YN,
+			SSTATUS, ISEQ, SORDERIDX
+		) VALUES (
+			#{promNo}, #{gubunId}, #{cateNo}, #{gaejungNo}, #{gaejungCode}, #{lawId}, #{lawNo},
+			#{buseoNo}, #{buseoOrgnztId}, #{title}, #{subTitle}, #{number}, #{party},
+			#{promDate}, #{startDate}, #{nullDate},
+			TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'),
+			#{reason,jdbcType=CLOB}, #{gaejung,jdbcType=CLOB}, #{bylaw,jdbcType=CLOB},
+			#{preamble,jdbcType=CLOB}, #{searchText,jdbcType=CLOB},
+			#{url}, #{provFlag}, #{provStyleCd}, #{provFileNo},
+			#{dispYn}, #{existingYn}, #{extDispYn}, #{dplItemYn}, #{relFileViewYn}, #{stsfdgYn},
+			#{status}, #{seq}, #{orderIdx}
+		)
+	</insert>
+
+	<update id="updateProm" parameterType="narainet.rlms.prom.service.PromVO">
+		UPDATE TB_PROM SET
+			SGUBUN_ID          = #{gubunId},
+			ICATE_NO           = #{cateNo},
+			IGAEJUNG_NO        = #{gaejungNo},
+			SGAEJUNG_CODE      = #{gaejungCode},
+			ILAW_ID            = #{lawId},
+			ILAW_NO            = #{lawNo},
+			IBUSEO_NO          = #{buseoNo},
+			SBUSEO_ORGNZT_ID   = #{buseoOrgnztId},
+			STITLE             = #{title},
+			SSUB_TITLE         = #{subTitle},
+			SNUM               = #{number},
+			SPARTY             = #{party},
+			SPROM_DT           = #{promDate},
+			SSTART_DT          = #{startDate},
+			SNULL_DT           = #{nullDate},
+			SREASON            = #{reason,jdbcType=CLOB},
+			SGAEJUNG           = #{gaejung,jdbcType=CLOB},
+			SBYLAW             = #{bylaw,jdbcType=CLOB},
+			SPREAMBLE          = #{preamble,jdbcType=CLOB},
+			SSEARCH_TEXT       = #{searchText,jdbcType=CLOB},
+			SURL               = #{url},
+			SPROV_FG           = #{provFlag},
+			SPROV_STYLE_CD     = #{provStyleCd},
+			SPROV_FILE_NO      = #{provFileNo},
+			SDISP_YN           = #{dispYn},
+			SEXISTING_YN       = #{existingYn},
+			SEXT_DISP_YN       = #{extDispYn},
+			SDPL_ITEM_YN       = #{dplItemYn},
+			SREL_FILE_VIEW_YN  = #{relFileViewYn},
+			SSTSFDG_YN         = #{stsfdgYn},
+			SSTATUS            = #{status},
+			ISEQ               = #{seq},
+			SORDERIDX          = #{orderIdx}
+		WHERE IPROM_NO = #{promNo}
+	</update>
+
+	<update id="updatePromExistingYn">
+		UPDATE TB_PROM SET SEXISTING_YN = #{existingYn} WHERE IPROM_NO = #{promNo}
+	</update>
+
+	<update id="resetPromExistingByLawId">
+		UPDATE TB_PROM SET SEXISTING_YN = 'N'
+		 WHERE ILAW_ID = #{lawId}
+	</update>
+
+	<!-- 단건 삭제 — 트리거가 PROV_VRSN/PROV_HTML/DOCU/SRC_STORED/REL_VRSN cascade -->
+	<delete id="deleteProm">
+		DELETE FROM TB_PROM WHERE IPROM_NO = #{promNo}
+	</delete>
+
+	<!--
+	  빈 회차 안전 삭제용 의존행 총합.
+	  TB_PROV_VRSN / TB_PROV_HTML / TB_DOCU / TB_REL_VRSN / TB_ATTACH(SREF_TABLE='TB_PROM') 합.
+	  0 = 빈 회차(아무 본문도 없음) → 삭제 허용.
+	  TB_ATTACH 는 SREF_TABLE 컬럼이 NULL 일 수 있어 NVL 처리.
+	-->
+	<select id="countDependentRowsByPromNo" resultType="int">
+		SELECT
+			(SELECT COUNT(*) FROM TB_PROV_VRSN WHERE IPROM_NO = #{promNo})
+		  + (SELECT COUNT(*) FROM TB_PROV_HTML WHERE IPROM_NO = #{promNo})
+		  + (SELECT COUNT(*) FROM TB_DOCU      WHERE IPROM_NO = #{promNo})
+		  + (SELECT COUNT(*) FROM TB_REL_VRSN  WHERE IPROM_NO = #{promNo})
+		  + (SELECT COUNT(*) FROM TB_ATTACH    WHERE NVL(SREF_TABLE,' ') = 'TB_PROM' AND IREF_NO = #{promNo})
+		  AS CNT
+		  FROM DUAL
+	</select>
+
+	<delete id="deletePromList">
+		DELETE FROM TB_PROM
+		 WHERE IPROM_NO IN
+		<foreach collection="list" item="no" open="(" close=")" separator=",">
+			#{no}
+		</foreach>
+	</delete>
+
+	<update id="updatePromSequence">
+		UPDATE TB_PROM SET ISEQ = #{seq} WHERE IPROM_NO = #{promNo}
+	</update>
+
+	<!-- 분류이동 — 같은 법령(lawId)의 전 회차를 함께 이동(회차 간 분류 발산 방지).
+	     ※ 열람제한/삭제분류 게이트는 법령 현행분류(lawCurCateNo) 기준(2026-07-08)이라 발산돼도 우회는 없지만,
+	        표시(CATE_NM 등)·데이터 정합을 위해 전회차 일괄 이동은 유지. -->
+	<update id="updatePromCategoryMove">
+		UPDATE TB_PROM SET ICATE_NO = #{cateNo}
+		 WHERE ILAW_ID = ( SELECT ILAW_ID FROM TB_PROM WHERE IPROM_NO = #{promNo} )
+	</update>
+
+	<!-- ============================================================ -->
+	<!-- Front 검색 5종 (레거시 fulltext.html 호환)                       -->
+	<!-- ============================================================ -->
+
+	<!--
+	  공통 sql 조각 — 구분(gubunIds)/부서/검색어 필터.
+	  gubunIds = 선택한 SGUBUN_ID 코드 목록('FT_GUBUN_N' 그대로) — 옛 gubun1~5='TRUE' 방식 폐기(2026-07-10 동적화).
+	  신설 구분(FT_GUBUN_6+)도 코드 그대로 통과. 비면(또는 미전달) 필터 미적용=전체.
+	  숨김 구분(USE_AT='N')은 별도 excludeHiddenGubun 이 계속 차단(#{} 바인딩=인젝션 무해).
+	-->
+	<sql id="frontCommonFilter">
+		<if test="gubunIds != null and !gubunIds.isEmpty()">
+			AND p.SGUBUN_ID IN
+			<foreach collection="gubunIds" item="g" open="(" separator="," close=")">#{g}</foreach>
+		</if>
+		<if test="buseoNo != null">
+		   AND p.IBUSEO_NO = #{buseoNo}
+		</if>
+		<if test="cateNo != null">
+		   AND p.ICATE_NO = #{cateNo}
+		</if>
+		<if test="searchKeyword != null and searchKeyword != ''">
+			<choose>
+				<when test="searchCnd == '1'">
+		   <![CDATA[ AND DBMS_LOB.INSTR(p.SSEARCH_TEXT, #{searchKeyword}) > 0 ]]>
+				</when>
+				<when test="searchCnd == '2'">
+		   AND UPPER(c.SNAME) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</when>
+				<when test="searchCnd == '3'">
+		   AND UPPER(b.ORGNZT_NM) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</when>
+				<otherwise>
+		   AND UPPER(p.STITLE) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+				</otherwise>
+			</choose>
+		</if>
+		<!-- 공포일(SPROM_DT) 범위 — "YYYY-MM-DD" 문자열 사전식 비교(=날짜순). 빈값이면 미적용. -->
+		<if test="searchFromDt != null and searchFromDt != ''">
+		   <![CDATA[ AND p.SPROM_DT >= #{searchFromDt} ]]>
+		</if>
+		<if test="searchToDt != null and searchToDt != ''">
+		   <![CDATA[ AND p.SPROM_DT <= #{searchToDt} ]]>
+		</if>
+	</sql>
+
+	<!-- 미승인 draft 비노출 게이트 (사용자 화면 전용).
+	     최신 워크상태가 승인완료/수정완료(또는 워크행 없는 레거시)인 회차만 통과 = '승인된' 회차만.
+	     SEXISTING_YN 으로 못 거르는 연혁검색/신구대조(과거 승인본은 'N' 이라 포함돼야 함)에서
+	     신규회차 draft(편집중/승인요청/승인반려)만 정확히 제외.
+	     ※ 수정권한요청/수정권한승인반려 는 '현행(SEXISTING_YN='Y') 회차 위'에 얹히는 상태라 제외하면
+	        해당 현행 규정이 연혁/신구대조 후보에서 통째로 사라짐 → 목록에서 빼면 안 됨(2026-07-01 교정).
+	     ※ 메인 테이블 별칭은 반드시 p (TB_PROM p). -->
+	<sql id="excludeUnapprovedDraft">
+		AND NOT EXISTS (
+			SELECT 1 FROM TB_PROM_WRK dw
+			 WHERE dw.IPROM_NO = p.IPROM_NO
+			   AND dw.IPWRK_NO = ( SELECT MAX(dw2.IPWRK_NO) FROM TB_PROM_WRK dw2 WHERE dw2.IPROM_NO = p.IPROM_NO )
+			   AND dw.SSTATUS IN ('편집중', '승인요청', '승인반려')
+		)
+	</sql>
+
+	<!--
+		유효기간 게이트 — 2026-07-16 A안(시행예정 공개)으로 분해.
+	     · effectiveStarted: 시행일(SSTART_DT) 도래. 값 없으면(NULL/공백/미지정 센티넬) 통과.
+	     · notExpired:       종료일(SNULL_DT) 미경과. 값 없으면 영구(永久) → 통과.
+	     · currentlyEffective = 둘의 합성(도래+미종료). 현재 사용자 표면은 전부 notExpired 만 씀 —
+	       공포(승인)된 규정은 시행 전에도 노출하고 "시행예정" 뱃지로 구분(법제처 방식).
+	       승인 즉시 이전 회차가 SEXISTING_YN='N' 강등되므로, 옛 게이트(도래 요구)로는
+	       공포~시행 사이 규정이 현행목록·통합검색·자동링크에서 통째로 증발했다(그 갭의 수정).
+	     날짜=VARCHAR2 'YYYY-MM-DD'(사전식=연대순 비교). 메인 테이블 별칭 p 전제.
+	     ※ 폐지목록/연혁검색/관리자 화면엔 적용 안 함(과거·종료본을 봐야 하므로).
+	      -->
+	<sql id="effectiveStarted">
+		AND ( p.SSTART_DT IS NULL OR TRIM(p.SSTART_DT) IS NULL OR p.SSTART_DT = '--'
+		      OR p.SSTART_DT <![CDATA[ <= ]]> TO_CHAR(SYSDATE, 'YYYY-MM-DD') )
+	</sql>
+	<sql id="notExpired">
+		AND ( p.SNULL_DT IS NULL OR TRIM(p.SNULL_DT) IS NULL OR p.SNULL_DT = '--'
+		      OR p.SNULL_DT <![CDATA[ >= ]]> TO_CHAR(SYSDATE, 'YYYY-MM-DD') )
+	</sql>
+	<sql id="currentlyEffective">
+		<include refid="effectiveStarted"/>
+		<include refid="notExpired"/>
+	</sql>
+
+	<!--
+		법령별 현행분류 집계(법령 1행: ILAW_ID → 최신 회차의 ICATE_NO) — 열람제한/삭제분류 게이트의 판정 기준.
+	     PromReadGuard(selectLatestCateNoByLawId)와 동일: (ILAW_NO, IPROM_NO) 최후행. 연혁등록으로 회차 간
+	     분류가 발산해도 과거 회차가 옛 분류로 게이트를 우회하지 못하게, 행 자신이 아닌 법령 단위로
+	     판정(2026-07-08 사용자 확정 — "연혁조차 보여주지 말자").
+	     ★성능(2026-07-08 재작성): 옛 형태(행별 상관 스칼라 + 행별 CONNECT BY ×5클론)는 홈/현행목록을
+	     10초+ 로 만들었음 → 무상관 집합(쿼리당 1회 계산, 해시 안티/세미 조인)으로 재작성.
+	     구·신형 등가성은 실DB 3페르소나(무권한/USER매칭/DEPT매칭) 비교로 검증(결과 완전일치, 10.8s→0.9s).
+	      -->
+	<sql id="lawCurCateAgg">( SELECT pl.ILAW_ID, MAX(pl.ICATE_NO) KEEP (DENSE_RANK LAST ORDER BY pl.ILAW_NO, pl.IPROM_NO) CUR_CATE, MAX(pl.SGUBUN_ID) KEEP (DENSE_RANK LAST ORDER BY pl.ILAW_NO, pl.IPROM_NO) CUR_GUBUN FROM TB_PROM pl GROUP BY pl.ILAW_ID )</sql>
+
+	<!--
+		삭제분류 게이트 (사용자 화면 전용) — 현행분류(또는 그 조상)가 삭제(TB_CATE.SDEL_YN='Y')된 법령 제외.
+	     front 분류 트리는 삭제분류를 렌더하지 않아(편집계 IDE 트리의 '(미분류)' 폴백만 예외) 해당 규정이 트리로
+	     도달 불가 → 목록/검색도 함께 숨겨 정합 유지(2026-07-08 사용자 확정).
+	     "조상-또는-자신이 삭제" ⟺ "현행분류 ∈ 삭제노드의 자손-또는-자신 집합" — 후자는 CONNECT BY 1회로 집합 계산.
+	     현행분류 NULL(미분류) 법령은 통과(구형 동일). 관리자 화면(selectPromList, searchFullText 등)엔 적용 안 함.
+	     ※ 메인 테이블 별칭은 반드시 p (TB_PROM p — ILAW_ID NOT NULL).
+	      -->
+	<sql id="excludeDeletedCate">
+		AND p.ILAW_ID NOT IN (
+			SELECT lcd.ILAW_ID FROM <include refid="lawCurCateAgg"/> lcd
+			 WHERE lcd.CUR_CATE IN ( SELECT dd.ICATE_NO FROM TB_CATE dd
+			                         START WITH dd.SDEL_YN = 'Y'
+			                         CONNECT BY PRIOR dd.ICATE_NO = dd.IREF ) )
+	</sql>
+
+	<!-- 숨김 구분 게이트 — 구분(ccm 'SGUBUN')이 표시 안 함(USE_AT='N')이면 그 구분의 규정을
+	     전 노출 표면(트리/목록/검색)에서 제외. 열람제한과 달리 역할 면제 없음(전역 스위치) —
+	     분류관리 화면만 예외(복구 입구, 2026-07-09 사용자 확정). excludeDeletedCate 와 쌍으로 적용.
+	     ※ 메인 테이블 별칭은 반드시 p. -->
+	<sql id="excludeHiddenGubun">
+		AND NOT EXISTS (
+			SELECT 1 FROM COMTCCMMNDETAILCODE hg
+			 WHERE hg.CODE_ID = 'SGUBUN' AND hg.CODE = p.SGUBUN_ID AND hg.USE_AT = 'N'
+		)
+	</sql>
+
+	<!--
+		분류/구분별 열람제한 게이트 (TB_CATE_READER + TB_GUBUN_READER, 사용자 화면 전용) — 미지정 = 전체 공개.
+	     허용 = "제한 전무(분류 계열+구분)" OR "분류 계열 제한에 본인 매칭" OR "구분 제한에 본인 매칭" (OR 결합).
+	     제한분류 집합 = {규칙이 걸린 분류 자신(상속무관)} ∪ {INHERIT_YN='Y' 규칙 분류의 자손-또는-자신}
+	     (구형 "조상 탐색" 판정과 동치 — 방향만 뒤집어 집합 1회 계산). 허용 집합 = 같은 모양 + 본인 매칭 규칙만.
+	     구분 = 법령 '현행(최신 회차)' 구분(CUR_GUBUN) 매칭(상속 개념 없음) — 2026-07-20 행 기준(p.SGUBUN_ID)에서
+	     통일(분류축과 동일 철학: 회차 간 구분 발산 시 과거 회차 우회·과차단 방지. 발산 실데이터 0건이라 결과 불변).
+	     면제역할(ADMIN/EDITOR/APPROVER)은 자바(PromReadGuard.applyReadGate)가 applyReadGate 를 안 켜므로 미적용.
+	     ※ 메인 테이블 별칭은 반드시 p (TB_PROM p). p 외 조인 별칭 참조 금지(조인 없는 Cnt 쿼리 호환).
+	      -->
+	<sql id="cateReadGate">
+		<if test="applyReadGate">
+		AND ( p.ILAW_ID NOT IN (
+				SELECT lcr.ILAW_ID FROM <include refid="lawCurCateAgg"/> lcr
+				 WHERE lcr.CUR_CATE IN (
+				       SELECT rr.ICATE_NO FROM TB_CATE_READER rr
+				       UNION
+				       SELECT ca.ICATE_NO FROM TB_CATE ca
+				        START WITH ca.ICATE_NO IN ( SELECT r.ICATE_NO FROM TB_CATE_READER r WHERE r.INHERIT_YN = 'Y' )
+				        CONNECT BY PRIOR ca.ICATE_NO = ca.IREF )
+				    OR lcr.CUR_GUBUN IN ( SELECT gg.SGUBUN_ID FROM TB_GUBUN_READER gg ) )
+		   OR p.ILAW_ID IN (
+				SELECT lca.ILAW_ID FROM <include refid="lawCurCateAgg"/> lca
+				 WHERE lca.CUR_CATE IN (
+				       SELECT rm.ICATE_NO FROM TB_CATE_READER rm
+				        WHERE ( ( rm.READER_TY = 'USER' AND rm.READER_ID = #{readerEsntlId} )
+				             OR ( rm.READER_TY = 'DEPT' AND rm.READER_ID = #{readerOrgnztId} ) )
+				       UNION
+				       SELECT cm.ICATE_NO FROM TB_CATE cm
+				        START WITH cm.ICATE_NO IN ( SELECT r2.ICATE_NO FROM TB_CATE_READER r2
+				                                     WHERE r2.INHERIT_YN = 'Y'
+				                                       AND ( ( r2.READER_TY = 'USER' AND r2.READER_ID = #{readerEsntlId} )
+				                                          OR ( r2.READER_TY = 'DEPT' AND r2.READER_ID = #{readerOrgnztId} ) ) )
+				        CONNECT BY PRIOR cm.ICATE_NO = cm.IREF )
+				    OR lca.CUR_GUBUN IN (
+				       SELECT g2.SGUBUN_ID FROM TB_GUBUN_READER g2
+				        WHERE ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{readerEsntlId} )
+				             OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{readerOrgnztId} ) ) ) ) )
+		</if>
+	</sql>
+
+	<!-- 연혁검색 (historyList) — 모든 '승인된' 개정본 표시(현행+과거 승인본). 미승인 draft 는 제외. -->
+	<select id="selectFrontHistoryList" parameterType="narainet.rlms.prom.service.PromVO"
+			resultMap="promResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				c.SNAME AS CATE_NM,
+				GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+				b.ORGNZT_NM AS BUSEO_NM
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE p.SDISP_YN = 'Y'
+				<include refid="frontCommonFilter"/>
+				<include refid="excludeUnapprovedDraft"/>
+				<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+				<include refid="cateReadGate"/>
+			 ORDER BY p.ILAW_ID DESC, p.ILAW_NO DESC, p.SPROM_DT DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectFrontHistoryListCnt" parameterType="narainet.rlms.prom.service.PromVO"
+			resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SDISP_YN = 'Y'
+			<include refid="frontCommonFilter"/>
+			<include refid="excludeUnapprovedDraft"/>
+			<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+			<include refid="cateReadGate"/>
+	</select>
+
+	<!-- 
+		폐지 목록 (nullifyList) — 실제 폐지(SNULL_DT 가 실날짜)만. 미폐지 센티넬 '- -' 제외.
+	     ※ 이전엔 (SEXISTING_YN='N' OR SNULL_DT IS NOT NULL) 이라 '- -'(미폐지)·구버전까지 전부 잡혀
+	       폐지목록이 사실상 전체목록이 되던 버그 (2026-06-09 실DB 확인 후 교정).
+	 -->
+	<select id="selectFrontNullifyList" parameterType="narainet.rlms.prom.service.PromVO"
+			resultMap="promResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				c.SNAME AS CATE_NM,
+				GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+				b.ORGNZT_NM AS BUSEO_NM
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE p.SDISP_YN = 'Y'
+			   AND (p.SNULL_DT IS NOT NULL AND p.SNULL_DT != '--' AND TRIM(p.SNULL_DT) IS NOT NULL)
+				<include refid="frontCommonFilter"/>
+				<include refid="excludeUnapprovedDraft"/>
+				<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+				<include refid="cateReadGate"/>
+			 ORDER BY p.SNULL_DT DESC NULLS LAST, p.SPROM_DT DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectFrontNullifyListCnt" parameterType="narainet.rlms.prom.service.PromVO"
+			resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SDISP_YN = 'Y'
+		   AND (p.SNULL_DT IS NOT NULL AND p.SNULL_DT != '--' AND TRIM(p.SNULL_DT) IS NOT NULL)
+			<include refid="frontCommonFilter"/>
+			<include refid="excludeUnapprovedDraft"/>
+			<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+			<include refid="cateReadGate"/>
+	</select>
+
+	<!-- 최근 개정내용 (latestList) — SINS_DT 가 최근 N 일 안. SEXISTING_YN='Y' 만. -->
+	<select id="selectFrontLatestList" parameterType="narainet.rlms.prom.service.PromVO"
+			resultMap="promResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				c.SNAME AS CATE_NM,
+				GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+				b.ORGNZT_NM AS BUSEO_NM
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE p.SDISP_YN = 'Y'
+			   AND p.SEXISTING_YN = 'Y'
+			   <![CDATA[ AND TO_DATE(p.SINS_DT, 'YYYY-MM-DD HH24:MI:SS') >= SYSDATE - #{searchDays} ]]>
+				<include refid="frontCommonFilter"/>
+				<include refid="notExpired"/>
+				<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+				<include refid="cateReadGate"/>
+			 ORDER BY p.SINS_DT DESC, p.IPROM_NO DESC
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectFrontLatestListCnt" parameterType="narainet.rlms.prom.service.PromVO"
+			resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SDISP_YN = 'Y'
+		   AND p.SEXISTING_YN = 'Y'
+		   <![CDATA[ AND TO_DATE(p.SINS_DT, 'YYYY-MM-DD HH24:MI:SS') >= SYSDATE - #{searchDays} ]]>
+			<include refid="frontCommonFilter"/>
+			<include refid="notExpired"/>
+			<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+			<include refid="cateReadGate"/>
+	</select>
+
+	<!-- 연혁검색 현행 목록 (historyList 기본) — 현행본(SEXISTING_YN='Y') 1행/규정. 컬럼=번호/분류명/규정명/담당부서/개정일자. -->
+	<select id="selectFrontCurrentList" parameterType="narainet.rlms.prom.service.PromVO" resultMap="promResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				c.SNAME AS CATE_NM,
+				GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+				b.ORGNZT_NM AS BUSEO_NM
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE p.SDISP_YN = 'Y'
+			   AND p.SEXISTING_YN = 'Y'
+				<include refid="frontCommonFilter"/>
+				<include refid="notExpired"/>
+				<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+				<include refid="cateReadGate"/>
+			 ORDER BY p.SGUBUN_ID, c.IREF, c.ISEQ, p.ISEQ, p.IPROM_NO
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectFrontCurrentListCnt" parameterType="narainet.rlms.prom.service.PromVO" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SDISP_YN = 'Y'
+		   AND p.SEXISTING_YN = 'Y'
+			<include refid="frontCommonFilter"/>
+			<include refid="notExpired"/>
+			<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+			<include refid="cateReadGate"/>
+	</select>
+
+	<!--
+		상세검색(detailSearch) — 레거시 상세검색하기 이식.
+		현행본(SEXISTING_YN='Y') 1행/규정 대상. 검색단위(제목/본문/별표/계약당사자) OR 결합,
+		자음/영문 첫글자, 검색일자 타입(개정 SPROM_DT / 시행 SSTART_DT), 소관부서, 규정분류(서브트리).
+		본문=TB_SRC_STORED SFLAG='조문'(SCONTENTS CLOB→DBMS_LOB.INSTR), 별표=SFLAG='서식'.
+		폐지사규 체크 시 폐지(IGAEJUNG_NO=3)도 포함.
+	-->
+	<sql id="detailSearchFilter">
+		<choose>
+			<when test="stPaji == 'TRUE'">
+				<!-- 폐지사규 포함 검색 — 종료/폐지본도 보여줘야 하므로 유효기간 게이트 미적용 -->
+				AND ( p.SEXISTING_YN = 'Y' OR p.IGAEJUNG_NO = 3 )
+			</when>
+			<otherwise>
+				AND p.SEXISTING_YN = 'Y'
+				<include refid="notExpired"/>
+			</otherwise>
+		</choose>
+		<if test="gubunIds != null and !gubunIds.isEmpty()">
+			AND p.SGUBUN_ID IN
+			<foreach collection="gubunIds" item="g" open="(" separator="," close=")">#{g}</foreach>
+		</if>
+		<if test="buseoNo != null">
+			AND p.IBUSEO_NO = #{buseoNo}
+		</if>
+		<if test="cateNo != null">
+			AND p.ICATE_NO IN ( SELECT ICATE_NO FROM TB_CATE START WITH ICATE_NO = #{cateNo} CONNECT BY PRIOR ICATE_NO = IREF )
+		</if>
+		<if test="prefixType == 'HAN'">
+			<![CDATA[ AND SUBSTR(p.STITLE, 1, 1) >= #{prefixFrom} AND SUBSTR(p.STITLE, 1, 1) < #{prefixTo} ]]>
+		</if>
+		<if test="prefixType == 'ENG'">
+			AND ( SUBSTR(p.STITLE, 1, 1) = #{prefixFrom} OR SUBSTR(p.STITLE, 1, 1) = #{prefixTo} )
+		</if>
+		<if test="searchFromDt != null and searchFromDt != ''">
+			<choose>
+				<when test="dateType == 'START'"><![CDATA[ AND p.SSTART_DT >= #{searchFromDt} ]]></when>
+				<otherwise><![CDATA[ AND p.SPROM_DT >= #{searchFromDt} ]]></otherwise>
+			</choose>
+		</if>
+		<if test="searchToDt != null and searchToDt != ''">
+			<choose>
+				<when test="dateType == 'START'"><![CDATA[ AND p.SSTART_DT <= #{searchToDt} ]]></when>
+				<otherwise><![CDATA[ AND p.SPROM_DT <= #{searchToDt} ]]></otherwise>
+			</choose>
+		</if>
+		<if test="searchKeyword != null and searchKeyword != ''">
+			AND (
+				1 = 0
+				<if test="stTitle == 'TRUE'">
+					OR UPPER(REPLACE(p.STITLE, ' ', '')) LIKE '%' || UPPER(REPLACE(#{searchKeyword}, ' ', '')) || '%'
+				</if>
+				<if test="stParty == 'TRUE'">
+					OR UPPER(REPLACE(p.SPARTY, ' ', '')) LIKE '%' || UPPER(REPLACE(#{searchKeyword}, ' ', '')) || '%'
+				</if>
+				<if test="stProvision == 'TRUE'">
+					OR EXISTS ( SELECT 1 FROM TB_SRC_STORED s WHERE s.ILAW_ID = p.ILAW_ID AND s.SFLAG = '조문'
+						<![CDATA[ AND ( DBMS_LOB.INSTR(s.SCONTENTS, #{searchKeyword}) > 0
+							OR UPPER(REPLACE(s.SFULL_TITLE, ' ', '')) LIKE '%' || UPPER(REPLACE(#{searchKeyword}, ' ', '')) || '%' ) ]]> )
+				</if>
+				<if test="stDocument == 'TRUE'">
+					OR EXISTS ( SELECT 1 FROM TB_SRC_STORED s WHERE s.ILAW_ID = p.ILAW_ID AND s.SFLAG = '서식'
+						<![CDATA[ AND ( DBMS_LOB.INSTR(s.SCONTENTS, #{searchKeyword}) > 0
+							OR UPPER(REPLACE(s.SFULL_TITLE, ' ', '')) LIKE '%' || UPPER(REPLACE(#{searchKeyword}, ' ', '')) || '%' ) ]]> )
+				</if>
+			)
+		</if>
+		<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+		<include refid="cateReadGate"/>
+	</sql>
+
+	<select id="selectDetailSearchList" parameterType="narainet.rlms.prom.service.PromVO" resultMap="promResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				<include refid="promColumns"/>,
+				c.SNAME AS CATE_NM,
+				GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+				b.ORGNZT_NM AS BUSEO_NM
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+			 WHERE p.SDISP_YN = 'Y'
+				<include refid="detailSearchFilter"/>
+			 ORDER BY p.SGUBUN_ID, c.IREF, c.ISEQ, p.ISEQ, p.IPROM_NO
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectDetailSearchListCnt" parameterType="narainet.rlms.prom.service.PromVO" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		 WHERE p.SDISP_YN = 'Y'
+			<include refid="detailSearchFilter"/>
+	</select>
+
+	<!-- 상세검색 소관부서 드롭다운 — 현행 규정에 실제 쓰인 부서 distinct -->
+	<select id="selectDetailBuseoList" resultType="java.util.HashMap">
+		SELECT DISTINCT p.IBUSEO_NO AS "buseoNo", b.ORGNZT_NM AS "buseoNm"
+		  FROM TB_PROM p
+		  JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SEXISTING_YN = 'Y' AND p.IBUSEO_NO IS NOT NULL AND b.ORGNZT_NM IS NOT NULL
+		 ORDER BY b.ORGNZT_NM
+	</select>
+
+	<!-- 상세검색 규정분류 드롭다운 — 구분>분류 트리 평면(들여쓰기) -->
+	<select id="selectDetailCateList" resultType="java.util.HashMap">
+		SELECT ICATE_NO AS "cateNo", SGUBUN_ID AS "gubunId",
+		       LPAD(' ', (LEVEL-1)*3) || SNAME AS "cateNm", LEVEL AS "lvl"
+		  FROM TB_CATE
+		 WHERE SDEL_YN = 'N'
+		 START WITH (IREF = 0 OR IREF IS NULL)
+		 CONNECT BY PRIOR ICATE_NO = IREF
+		 ORDER SIBLINGS BY ISEQ
+	</select>
+
+	<!-- 신구대조 후보 (comparisonList) — 같은 lawId 의 promNo 목록. 화면에서 좌/우 선택.
+	     frontOnly=true(사용자 신구대조) → 미승인 draft·삭제분류 제외. false(관리자 유효성검사) → 전체. -->
+	<select id="selectComparisonCandidates" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			NULL AS CATE_NM, NULL AS CATE_FULL_NM, NULL AS BUSEO_NM
+		  FROM TB_PROM p
+		 WHERE p.ILAW_ID = #{lawId}
+		<if test="frontOnly">
+			<include refid="excludeUnapprovedDraft"/>
+			<include refid="excludeDeletedCate"/>
+				<include refid="excludeHiddenGubun"/>
+		</if>
+		<include refid="cateReadGate"/>
+		 ORDER BY p.ILAW_NO DESC, p.SPROM_DT DESC
+	</select>
+
+	<!-- 운영 중 모든 법령 (유효성 검사용) -->
+	<select id="selectAllExisting" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			NULL AS CATE_NM, NULL AS CATE_FULL_NM, NULL AS BUSEO_NM
+		  FROM TB_PROM p
+		 WHERE p.SEXISTING_YN = 'Y'
+		   AND p.SDISP_YN = 'Y'
+		 ORDER BY p.IPROM_NO
+	</select>
+
+	<!-- 자동링크 사전 — 현행+표시+유효 규정의 경량 컬럼만 (CLOB 미포함, AutoLinkService 60초 캐시).
+	     사전 자격 = 사용자 현행 표면과 동일(SEXISTING_YN + SDISP_YN + notExpired — 시행예정 포함). -->
+	<select id="selectAutoLinkDict" resultMap="promResult">
+		SELECT
+			p.IPROM_NO, p.ILAW_ID, p.STITLE, p.SSUB_TITLE, p.ICATE_NO, p.SGUBUN_ID,
+			c.SNAME AS CATE_NM
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE c ON p.ICATE_NO = c.ICATE_NO
+		 WHERE p.SEXISTING_YN = 'Y'
+		   AND p.SDISP_YN = 'Y'
+		<include refid="notExpired"/>
+	</select>
+
+	<!-- 규정 일괄수정용: 선택 분류의 현행 규정(법령별 현행 1건). 정렬순서(SORDERIDX) 우선. -->
+	<select id="selectCurrentPromsByCate" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			c.SNAME AS CATE_NM,
+			GET_FULL_NAME_BY_CATE_NO('NONE', p.ICATE_NO) AS CATE_FULL_NM,
+			b.ORGNZT_NM AS BUSEO_NM
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN TB_CATE  c ON p.ICATE_NO  = c.ICATE_NO
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SEXISTING_YN = 'Y'
+		   AND p.ICATE_NO = #{cateNo}
+		 ORDER BY p.ISEQ, p.SORDERIDX, p.IPROM_NO
+	</select>
+
+	<!-- 트리용: 분류별 운영 법령 (ICATE_NO 정렬) -->
+	<select id="selectActivePromsForTree" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			NULL AS CATE_NM, NULL AS CATE_FULL_NM, NULL AS BUSEO_NM
+		  FROM TB_PROM p
+		 WHERE p.SEXISTING_YN = 'Y'
+		   AND p.SDISP_YN = 'Y'
+		 ORDER BY p.ICATE_NO, p.ISEQ, p.SPROM_DT DESC, p.IPROM_NO DESC
+	</select>
+
+	<!-- front 부서별 트리(2026-07-24) — 현행+표시 규정 & 소관부서명(표준 조직정보 COMTNORGNZTINFO).
+	     사용자 화면 게이트(삭제분류·숨김구분) 적용 — front 트리/목록 정합.
+	     열람제한 가지치기는 컨트롤러(promReadGuard.blockedPromNos)가 담당(기능별분류 트리와 동일 방식). -->
+	<select id="selectActivePromsForDeptTree" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			NULL AS CATE_NM, NULL AS CATE_FULL_NM,
+			b.ORGNZT_NM AS BUSEO_NM
+		  FROM TB_PROM p
+		  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(TO_CHAR(p.IBUSEO_NO), 16, '0'))
+		 WHERE p.SEXISTING_YN = 'Y'
+		   AND p.SDISP_YN = 'Y'
+		<include refid="excludeDeletedCate"/>
+		<include refid="excludeHiddenGubun"/>
+		 ORDER BY b.ORGNZT_NM NULLS LAST, p.STITLE, p.IPROM_NO
+	</select>
+
+	<!-- IDE 좌측 '작업중(draft)' 패널 — 미승인 draft 회차 재발견용.
+	     대상 = 현행 아님(SEXISTING_YN='N') + 최신 워크상태가 편집중/승인요청/승인반려.
+	     과거 승인본(SEXISTING_YN='N'이지만 최신 워크=승인완료/수정완료 또는 워크행 없음)은 제외됨.
+	     수정권한요청 계열은 현행 위 상태라 여기 대상 아님(현행은 분류 트리에 이미 있음). -->
+	<select id="selectDraftPromsForPanel" resultType="java.util.LinkedHashMap">
+		SELECT p.IPROM_NO   AS "promNo",
+		       p.ILAW_ID    AS "lawId",
+		       p.STITLE     AS "title",
+		       p.SPROM_DT   AS "promDate",
+		       w.SSTATUS    AS "status",
+		       w.SUSER_NM   AS "userNm",
+		       SUBSTR(w.SINS_DT, 1, 16) AS "workDt",
+		       c.SNAME      AS "cateNm"
+		  FROM TB_PROM p
+		  JOIN TB_PROM_WRK w
+		    ON w.IPROM_NO = p.IPROM_NO
+		   AND w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2 WHERE w2.IPROM_NO = p.IPROM_NO )
+		  LEFT OUTER JOIN TB_CATE c ON c.ICATE_NO = p.ICATE_NO
+		 WHERE p.SEXISTING_YN = 'N'
+		   AND p.SDISP_YN = 'Y'
+		   AND w.SSTATUS IN ('편집중', '승인요청', '승인반려')
+		 ORDER BY w.SINS_DT DESC
+	</select>
+
+	<!-- 편집계 트리(editorTreeJson) 전용 — draft-only 법령(현행 회차 없음)의 최신 draft 회차를 분류 트리에 합류.
+	     · 현행 있는 법령의 개정 draft 는 제외(트리에 현행 노드 有, 연혁목차로 도달 가능).
+	     · 과거 승인본만 남은 법령(최신 워크가 편집중/승인요청/승인반려 아님)도 제외.
+	     · 법령당 1행 = MAX(IPROM_NO). front 드로어는 treeJson(현행만)이라 이 쿼리를 타지 않음. -->
+	<select id="selectDraftOnlyPromsForTree" resultMap="promResult">
+		SELECT
+			<include refid="promColumns"/>,
+			NULL AS CATE_NM, NULL AS CATE_FULL_NM, NULL AS BUSEO_NM
+		  FROM TB_PROM p
+		 WHERE p.SEXISTING_YN = 'N'
+		   AND p.SDISP_YN = 'Y'
+		   AND NOT EXISTS ( SELECT 1 FROM TB_PROM cur
+		                     WHERE cur.ILAW_ID = p.ILAW_ID
+		                       AND cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y' )
+		   AND EXISTS ( SELECT 1 FROM TB_PROM_WRK w
+		                 WHERE w.IPROM_NO = p.IPROM_NO
+		                   AND w.IPWRK_NO = ( SELECT MAX(w2.IPWRK_NO) FROM TB_PROM_WRK w2 WHERE w2.IPROM_NO = p.IPROM_NO )
+		                   AND w.SSTATUS IN ('편집중', '승인요청', '승인반려') )
+		   AND p.IPROM_NO = ( SELECT MAX(p2.IPROM_NO) FROM TB_PROM p2
+		                       WHERE p2.ILAW_ID = p.ILAW_ID
+		                         AND p2.SEXISTING_YN = 'N' AND p2.SDISP_YN = 'Y' )
+		 ORDER BY p.ICATE_NO, p.ISEQ, p.SPROM_DT DESC, p.IPROM_NO DESC
+	</select>
+
+</mapper>

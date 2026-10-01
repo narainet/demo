@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <!-- 검색어 통계 채번(TB_STATS_KWD.ISKWD_NO, 숫자) — COMTECOPSEQ 'STATS_KWD_NO'.
+         레거시 SQ_STATS_KWD_NO 시퀀스는 미사용 동결(신규 채번은 eGov 표준으로 통일). -->
+    <bean name="egovStatsKwdIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="STATS_KWD_NO"/>
+    </bean>
+
+</beans>

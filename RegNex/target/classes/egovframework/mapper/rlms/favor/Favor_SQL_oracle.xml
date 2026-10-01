@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/favor/Favor_SQL_oracle.xml
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.favor.mapper.FavorMapper">
+
+	<resultMap id="favorResult" type="narainet.rlms.favor.service.FavorVO">
+		<result property="favorNo"     column="IFAVOR_NO"/>
+		<result property="gubun"       column="SGUBUN"/>
+		<result property="lawId"       column="ILAW_ID"/>
+		<result property="item"        column="SITEM"/>
+		<result property="description" column="SDESC"/>
+		<result property="userId"      column="SUSER_ID"/>
+		<result property="userName"    column="SUSER_NAME"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="sysId"       column="SSYS_ID"/>
+		<result property="promNo"      column="PROM_NO"/>
+		<result property="promTitle"   column="PROM_TITLE"/>
+		<result property="provDeleted" column="PROV_DELETED"/>
+		<result property="pendingYn"   column="PENDING_YN"/><!-- 현행본 시행예정(A안 뱃지) — selectMyFavorList 전용 -->
+	</resultMap>
+
+	<!-- 법령별 현행(최신 회차) 분류 — MAX KEEP DENSE_RANK LAST BY ILAW_NO,IPROM_NO.
+	     PromReadGuard.selectLatestCateNoByLawId(=canReadLaw 기준)·Prom_SQL lawCurCateAgg 와 동일 행. 무상관 1회 계산. -->
+	<sql id="lawCurCateAggFAV">( SELECT pl.ILAW_ID, MAX(pl.ICATE_NO) KEEP (DENSE_RANK LAST ORDER BY pl.ILAW_NO, pl.IPROM_NO) CUR_CATE, MAX(pl.SGUBUN_ID) KEEP (DENSE_RANK LAST ORDER BY pl.ILAW_NO, pl.IPROM_NO) CUR_GUBUN FROM TB_PROM pl GROUP BY pl.ILAW_ID )</sql>
+
+	<!--
+	  즐겨찾기 목록 열람제한 게이트 — 판정 = 법령 현행(최신 회차) 분류(lawCurCateAggFAV).
+	  ★PromReadGuard.canReadLaw(selectLatestCateNoByLawId → canReadCate) 와 동일 기준으로 목록·추가(addFavor) 정합.
+	  면제역할(ADMIN/EDITOR/APPROVER)은 자바(PromReadGuard.gateNeeded()=false → vo.applyReadGate=false)가 미적용.
+	  허용 = 열람제한 미지정(제한분류·제한구분 아님) OR 내가 열람대상(부서/개인) 매칭. 미분류(CUR_CATE NULL)·현행없음 = 통과.
+	  구분(SGUBUN) 축 = 법령 현행 구분(CUR_GUBUN) 매칭 — 2026-07-20 구분축 법령현행 통일 때 신설(이전엔 cate 축만).
+	  ★게이트 로직 정본 = Prom_SQL cateReadGate/RelWord cateReadGateRW — 변경 시 클론 동시수정(로컬 클론, 네임스페이스 재해석 방지). -->
+	<sql id="cateReadGateFAV">
+		<if test="vo.applyReadGate">
+		AND ( ( f.ILAW_ID IS NULL OR f.ILAW_ID NOT IN (
+					SELECT lcr.ILAW_ID FROM <include refid="lawCurCateAggFAV"/> lcr
+					 WHERE lcr.CUR_CATE IN (
+					       SELECT rr.ICATE_NO FROM TB_CATE_READER rr
+					       UNION
+					       SELECT ca.ICATE_NO FROM TB_CATE ca
+					        START WITH ca.ICATE_NO IN ( SELECT r.ICATE_NO FROM TB_CATE_READER r WHERE r.INHERIT_YN = 'Y' )
+					        CONNECT BY PRIOR ca.ICATE_NO = ca.IREF )
+					    OR lcr.CUR_GUBUN IN ( SELECT gg.SGUBUN_ID FROM TB_GUBUN_READER gg ) ) )
+			OR f.ILAW_ID IN (
+					SELECT lca.ILAW_ID FROM <include refid="lawCurCateAggFAV"/> lca
+					 WHERE lca.CUR_CATE IN (
+					       SELECT rm.ICATE_NO FROM TB_CATE_READER rm
+					        WHERE ( ( rm.READER_TY = 'USER' AND rm.READER_ID = #{vo.readerEsntlId} )
+					             OR ( rm.READER_TY = 'DEPT' AND rm.READER_ID = #{vo.readerOrgnztId} ) )
+					       UNION
+					       SELECT cm.ICATE_NO FROM TB_CATE cm
+					        START WITH cm.ICATE_NO IN ( SELECT r2.ICATE_NO FROM TB_CATE_READER r2
+					                                     WHERE r2.INHERIT_YN = 'Y'
+					                                       AND ( ( r2.READER_TY = 'USER' AND r2.READER_ID = #{vo.readerEsntlId} )
+					                                          OR ( r2.READER_TY = 'DEPT' AND r2.READER_ID = #{vo.readerOrgnztId} ) ) )
+					        CONNECT BY PRIOR cm.ICATE_NO = cm.IREF )
+					    OR lca.CUR_GUBUN IN (
+					       SELECT g2.SGUBUN_ID FROM TB_GUBUN_READER g2
+					        WHERE ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{vo.readerEsntlId} )
+					             OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{vo.readerOrgnztId} ) ) ) ) )
+		</if>
+	</sql>
+
+	<!--
+	  내 즐겨찾기 목록 — 현행 회차(SEXISTING_YN='Y') 조인으로 법령제목/현행회차 + 조항 삭제여부 부가.
+	  PROV_DELETED='Y' = 즐겨찾기한 조항(SITEM)이 현행 누적뷰에 더 이상 없음(개정 삭제/폐지).
+	  존재확인 = VERSION(SFULL_ITEM) / HTML(SITEM) 두 형식 모두 — 레거시 FavoriteService.search 파리티.
+	  누적 판정 = SFULL_ITEM/SITEM 별 MAX(PR.ILAW_NO) 행의 SDISP_YN != 'N' (selectAllCumulative 동일 패턴).
+	-->
+	<select id="selectMyFavorList" resultMap="favorResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			<!-- 등록일시는 화면에 분까지만 — 원본(초까지)은 정렬·비교용으로 그대로 둔다 (2026-07-31) -->
+			SELECT f.IFAVOR_NO, f.SGUBUN, f.ILAW_ID, f.SITEM, f.SDESC, f.SUSER_ID, f.SUSER_NAME, SUBSTR(f.SINS_DT, 1, 16) AS SINS_DT, f.SSYS_ID,
+			       cur.IPROM_NO AS PROM_NO, cur.STITLE AS PROM_TITLE,
+			       CASE WHEN cur.SSTART_DT <![CDATA[ > ]]> TO_CHAR(SYSDATE, 'YYYY-MM-DD') THEN 'Y' ELSE 'N' END AS PENDING_YN,
+			       CASE WHEN f.SGUBUN = 'PROVISION'
+			                 AND NOT EXISTS (
+			                    SELECT 1 FROM TB_PROV_VRSN PV, TB_PROM PR
+			                     WHERE PV.IPROM_NO = PR.IPROM_NO AND PR.ILAW_ID = f.ILAW_ID AND PV.SFULL_ITEM = f.SITEM
+			                       AND PR.ILAW_NO = ( SELECT MAX(PR2.ILAW_NO) FROM TB_PROV_VRSN PV2, TB_PROM PR2
+			                                           WHERE PV2.IPROM_NO = PR2.IPROM_NO AND PR2.ILAW_ID = f.ILAW_ID AND PV2.SFULL_ITEM = f.SITEM )
+			                       AND NVL(PV.SDISP_YN, 'Y') = 'Y' )
+			                 AND NOT EXISTS (
+			                    SELECT 1 FROM TB_PROV_HTML PH, TB_PROM PR
+			                     WHERE PH.IPROM_NO = PR.IPROM_NO AND PR.ILAW_ID = f.ILAW_ID AND PH.SITEM = f.SITEM
+			                       AND PR.ILAW_NO = ( SELECT MAX(PR3.ILAW_NO) FROM TB_PROV_HTML PH3, TB_PROM PR3
+			                                           WHERE PH3.IPROM_NO = PR3.IPROM_NO AND PR3.ILAW_ID = f.ILAW_ID AND PH3.SITEM = f.SITEM )
+			                       AND NVL(PH.SDISP_YN, 'Y') = 'Y' )
+			            THEN 'Y' ELSE 'N' END AS PROV_DELETED
+			  FROM TB_FAVOR f
+			  LEFT JOIN TB_PROM cur ON cur.ILAW_ID = f.ILAW_ID AND cur.SEXISTING_YN = 'Y'
+			 WHERE f.SUSER_ID = #{userId}
+			<if test="vo.searchGubun != null and vo.searchGubun != ''">
+			   AND f.SGUBUN = #{vo.searchGubun}
+			</if>
+			<if test="vo.searchKeyword != null and vo.searchKeyword != ''">
+			   AND (UPPER(f.SDESC) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+			    OR  UPPER(f.SITEM) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%')
+			</if>
+			<include refid="cateReadGateFAV"/>
+			 ORDER BY f.IFAVOR_NO DESC
+		) TB ) WHERE rn BETWEEN #{vo.firstIndex}+1 AND #{vo.firstIndex}+#{vo.recordCountPerPage}
+	</select>
+
+	<!-- 목록과 동일 열람제한 게이트로 건수 정합 유지(게이트는 f.ILAW_ID 기준이라 cur 조인 불요). -->
+	<select id="selectMyFavorListCnt" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_FAVOR f
+		 WHERE f.SUSER_ID = #{userId}
+		<if test="vo.searchGubun != null and vo.searchGubun != ''">
+		   AND f.SGUBUN = #{vo.searchGubun}
+		</if>
+		<if test="vo.searchKeyword != null and vo.searchKeyword != ''">
+		   AND (UPPER(f.SDESC) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+		    OR  UPPER(f.SITEM) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%')
+		</if>
+		<include refid="cateReadGateFAV"/>
+	</select>
+
+	<select id="selectFavorByNo" resultMap="favorResult">
+		SELECT IFAVOR_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME, SINS_DT, SSYS_ID
+		  FROM TB_FAVOR WHERE IFAVOR_NO = #{favorNo}
+	</select>
+
+	<select id="selectFavorByLawItem" resultMap="favorResult">
+		SELECT IFAVOR_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME, SINS_DT, SSYS_ID
+		  FROM TB_FAVOR
+		 WHERE SUSER_ID = #{userId}
+		   AND ILAW_ID  = #{lawId}
+		   AND SITEM    = #{item}
+</select>
+
+	<select id="selectFavorListByLaw" resultMap="favorResult">
+		SELECT IFAVOR_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME, SINS_DT, SSYS_ID
+		  FROM TB_FAVOR
+		 WHERE SUSER_ID = #{userId}
+		   AND ILAW_ID  = #{lawId}
+		 ORDER BY SITEM
+	</select>
+
+	<!-- ISEEN_LAW_NO = 등록 시점의 현행 회차 — 등록 이전 개정을 소급 알림하지 않음(현행 없으면 NULL=알림 제외) -->
+	<insert id="insertFavor" parameterType="narainet.rlms.favor.service.FavorVO">
+		INSERT INTO TB_FAVOR (
+			IFAVOR_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME, SINS_DT, ISEEN_LAW_NO
+		) VALUES (
+			#{favorNo}, #{gubun}, #{lawId}, #{item}, #{description},
+			#{userId}, #{userName},
+			TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'),
+			(SELECT MAX(p.ILAW_NO) FROM TB_PROM p WHERE p.ILAW_ID = #{lawId} AND p.SEXISTING_YN = 'Y')
+		)
+	</insert>
+
+	<!-- 전문뷰어 본문 열람 시 확인 회차 기록 — 홈 "즐겨찾기 규정 개정 소식" 해소.
+	     GREATEST = 연혁(과거 회차) 열람은 무영향, 현행 열람만 알림을 지운다. 즐겨찾기 없는 규정 = 0행(무해). -->
+	<update id="touchFavorSeen">
+		UPDATE TB_FAVOR
+		   SET ISEEN_LAW_NO = GREATEST(NVL(ISEEN_LAW_NO, 0), #{lawNo})
+		 WHERE SUSER_ID = #{userId}
+		   AND ILAW_ID  = #{lawId}
+	</update>
+
+	<update id="updateFavor" parameterType="narainet.rlms.favor.service.FavorVO">
+		UPDATE TB_FAVOR SET
+			SGUBUN  = #{gubun},
+			SITEM   = #{item},
+			SDESC   = #{description}
+		WHERE IFAVOR_NO = #{favorNo}
+	</update>
+
+	<!-- 조 번호 변경 시 즐겨찾기 이관 (2026-07-30) — 같은 규정 안에서 옛 식별자를 새 번호로 -->
+	<update id="updateSitemByLawOfProm">
+		UPDATE TB_FAVOR
+		   SET SITEM = #{newItem}
+		 WHERE ILAW_ID = ( SELECT ILAW_ID FROM TB_PROM WHERE IPROM_NO = #{regPromNo} )
+		   AND SITEM   = #{oldItem}
+	</update>
+
+	<delete id="deleteFavor">
+		DELETE FROM TB_FAVOR WHERE IFAVOR_NO = #{favorNo}
+	</delete>
+
+</mapper>

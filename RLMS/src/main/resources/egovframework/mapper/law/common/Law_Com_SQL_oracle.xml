@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/common/Law_Com_SQL_oracle.xml
+  송무 공용 조회 — ccm 코드 / 부서 / 법원 select 소스.
+-->
+<mapper namespace="narainet.law.common.mapper.LawComMapper">
+
+	<select id="selectCmmnCodeList" resultType="map">
+		SELECT CODE    AS "code",
+		       CODE_NM AS "codeNm",
+		       CODE_DC AS "codeDc"
+		  FROM COMTCCMMNDETAILCODE
+		 WHERE CODE_ID = #{codeId}
+		   AND USE_AT  = 'Y'
+		 ORDER BY CODE_DC, CODE
+	</select>
+
+	<select id="selectOrgnztList" resultType="map">
+		SELECT ORGNZT_ID AS "orgnztId",
+		       ORGNZT_NM AS "orgnztNm"
+		  FROM COMTNORGNZTINFO
+		 ORDER BY ORGNZT_NM
+	</select>
+
+	<select id="selectCourtList" resultType="map">
+		SELECT COURT_ID AS "courtId",
+		       COURT_NM AS "courtNm"
+		  FROM LAW_COURT
+		 WHERE USE_YN = 'Y'
+		   AND COURT_ID > 0
+		 ORDER BY SORT_ORDR, COURT_ID
+	</select>
+
+	<select id="selectLawyerOptions" resultType="map">
+		SELECT LAWYER_ID AS "lawyerId",
+		       LAW_FIRM || ' / ' || LAWYER_NM AS "label"
+		  FROM LAW_LAWYER
+		 WHERE DEL_YN = 'N'
+		 ORDER BY LAW_FIRM, LAWYER_NM, LAWYER_ID
+	</select>
+
+</mapper>

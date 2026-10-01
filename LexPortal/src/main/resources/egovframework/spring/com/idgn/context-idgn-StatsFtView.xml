@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <!-- 규정 조회통계 채번(TB_STATS_FT_VIEW.ISFVIEW_NO, 숫자) — COMTECOPSEQ 'STATS_FT_VIEW_NO'.
+         적재는 전문뷰어 진입(FullTextController.provisionList) 1회=1행(검색어 통계와 동일 철학). -->
+    <bean name="egovStatsFtViewIdGnrService" class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl" destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource" />
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="STATS_FT_VIEW_NO"/>
+    </bean>
+
+</beans>

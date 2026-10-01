@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:security="http://www.springframework.org/schema/security"
+	xmlns:egov-security="http://maven.egovframe.go.kr/schema/egov-security"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+        http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security.xsd
+		http://maven.egovframe.go.kr/schema/egov-security http://maven.egovframe.go.kr/schema/egov-security/egov-security-4.3.0.xsd">
+
+<!--
+수정일               수정자			수정내용
+==========   ============	=================================================
+2011.09.07   서준식                   일반, 업무사용자의 경우 조직아이디가 없어 로그인이 안되던 문제 수정(SQL 수정)
+2011.09.25   서준식                   usersByUsernameQuery 쿼리의 조직 아이디 비교 부분  오류 수정 > alias 추가
+2014.06.13   Vincent Han    표준프레임워크 3.0 적용 (간소화 설정 사용)
+2017.07.10   장동한                   실행행환경 v3.7 적용[보안기능 추가(sniff, xFrameOptions, xssProtection csrf)]
+2018.10.26   신용호                   실행행환경 v3.8 적용
+2020.08.28   정진오                   표준프레임워크 v3.10 개선
+2023.12.20   정진오                   표준프레임워크 v4.2 개선(SpEL(use-expressions) 설정 추가)
+-->
+
+	<security:http pattern="/css/**" security="none"/>
+	<security:http pattern="/html/**" security="none"/>
+    <security:http pattern="/images/**" security="none"/>
+ 	<security:http pattern="/js/**" security="none"/>
+ 	<security:http pattern="/resource/**" security="none"/>
+ 	<security:http pattern="/resources/**" security="none"/>
+ 	<security:http pattern="/validator.do" security="none"/>
+ 	<security:http pattern="/uat/uia/actionLogout.do" security="none"/>
+ 	<security:http pattern="\A/WEB-INF/jsp/.*\Z" request-matcher="regex" security="none"/>
+
+    <egov-security:config id="securityConfig"
+		loginUrl="/uat/uia/egovLoginUsr.do"
+		logoutSuccessUrl="/uat/uia/egovLoginUsr.do"
+		loginFailureUrl="/uat/uia/egovLoginUsr.do?login_error=1"
+		accessDeniedUrl="/sec/ram/accessDenied.do"
+
+		dataSource="egov.dataSource"
+		jdbcUsersByUsernameQuery="SELECT USER_ID, ESNTL_ID AS PASSWORD, 1 ENABLED, USER_NM, USER_ZIP,
+                                                              USER_ADRES, USER_EMAIL, USER_SE, ORGNZT_ID, ESNTL_ID,
+                                                              (select a.ORGNZT_NM from COMTNORGNZTINFO a where a.ORGNZT_ID = m.ORGNZT_ID) ORGNZT_NM
+                                                       FROM COMVNUSERMASTER m WHERE CONCAT(USER_SE, USER_ID) = ?"
+		jdbcAuthoritiesByUsernameQuery="SELECT A.SCRTY_DTRMN_TRGET_ID USER_ID, A.AUTHOR_CODE AUTHORITY
+                                                             FROM COMTNEMPLYRSCRTYESTBS A, COMVNUSERMASTER B
+                                                             WHERE A.SCRTY_DTRMN_TRGET_ID = B.ESNTL_ID
+                                                             AND ? IN (B.USER_ID, CONCAT(B.USER_SE, B.USER_ID))"
+		jdbcMapClass="egovframework.com.sec.security.common.EgovSessionMapping"
+
+		requestMatcherType="regex"
+		hash="plaintext"
+		hashBase64="false"
+
+		concurrentMaxSessons="1"
+		concurrentExpiredUrl="/uat/uia/egovLoginUsr.do"
+		errorIfMaximumExceeded="false"
+
+		defaultTargetUrl="/main.do"
+		alwaysUseDefaultTargetUrl="true"
+
+		sniff="true"
+		xframeOptions="SAMEORIGIN" 
+		xssProtection="true" 
+		cacheControl="false"
+		csrf="false"
+		csrfAccessDeniedUrl="/egovCSRFAccessDenied.do"
+	/>
+
+	<egov-security:secured-object-config id="securedObjectConfig"
+		sqlHierarchicalRoles="
+			SELECT a.CHLDRN_ROLE as child, a.PARNTS_ROLE parent
+			FROM COMTNROLES_HIERARCHY a LEFT JOIN COMTNROLES_HIERARCHY b on (a.CHLDRN_ROLE = b.PARNTS_ROLE)"
+		sqlRolesAndUrl="
+			SELECT url, authority
+			FROM (
+				/* L1 entry URL - any authenticated user */
+				          SELECT '\A/uat/uia/.*\.do.*\Z' url, 'ROLE_ANONYMOUS' authority, 0 role_sort FROM DUAL
+					UNION ALL SELECT '\A/uat/uia/.*\.do.*\Z','IS_AUTHENTICATED_FULLY',0 FROM DUAL
+				/* 브랜드 이미지(로고·파비콘) — 로그인 화면 헤더와 탭 아이콘에 쓰이므로 인증 전에도 열려야 한다.
+				   읽기 전용 스트리밍이고 내용은 고객사 로고라 노출되어도 무방. 설정 화면(/uss/ion/brd/.*)은
+				   규칙을 두지 않아 L7 폴백(ADMIN)으로 관리자 전용이 유지된다 (2026-07-31) */
+					UNION ALL SELECT '\A/cmm/brand/(logo|favicon)\.do.*\Z','ROLE_ANONYMOUS',2 FROM DUAL
+					UNION ALL SELECT '\A/cmm/brand/(logo|favicon)\.do.*\Z','IS_AUTHENTICATED_FULLY',2 FROM DUAL
+					/* 포탈 공개 메인(/index.do) — 홈페이지성 첫 화면이라 비로그인 열람 허용 (2026-08-04).
+					   Globals.law.portalMain=N(관리기능만) 이면 컨트롤러가 /main.do 로 넘겨 로그인이 첫 화면 */
+						UNION ALL SELECT '\A/index\.do(\?.*)?\Z','ROLE_ANONYMOUS',3 FROM DUAL
+						UNION ALL SELECT '\A/index\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',3 FROM DUAL
+					UNION ALL SELECT '\A/main\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',1 FROM DUAL
+				UNION ALL SELECT '\A/rlms/home\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',1 FROM DUAL
+				UNION ALL SELECT '\A/rlms/mgr/dashboard\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',1 FROM DUAL
+				/* 표준 첨부 다운로드(공지 등 COMTNFILE) — atchFileId 가 세션 암호화 키(2022.12 패치)라
+				   유추 불가·타세션 무효 → 인증 사용자 전체 개방(2026-07-08, 공지 첨부 사용자 다운로드) */
+				UNION ALL SELECT '\A/cmm/fms/FileDown\.do.*\Z','IS_AUTHENTICATED_FULLY',10 FROM DUAL
+				/* 표준 첨부 ZIP 일괄 다운로드(FileZipDown) — FileDown 과 동일 안전 논리(atchFileId 세션 암호화 키만 유효) */
+				UNION ALL SELECT '\A/cmm/fms/FileZipDown\.do.*\Z','IS_AUTHENTICATED_FULLY',11 FROM DUAL
+				/* L2 prom/related/prommap viewer reads (cross-cutting, not menu-derivable): USER/EDITOR/APPROVER/ADMIN
+				   ※ 2026-07-29: selectPromList / selectPromDetail / selectPromHistory / searchHistory 를 이 집합에서 뺐다.
+				      넷 다 관리 화면이다 — promList.jsp 는 편집·삭제·선택삭제 버튼을 그대로 그리고,
+				      searchHistory 는 같은 promList 뷰를 재사용하며, promDetail.jsp 도 수정·삭제·IDE 편집 링크를 가진다.
+				      그래서 ROLE_USER(일반회원)에게 법령 관리 목록·상세가 통째로 열려 있었다.
+				      (속성값 안이라 큰따옴표 금지 — 2026-07-29 이 주석의 따옴표가 XML 속성을 끊어 컨텍스트가 기동 못 한 실사고)
+				      이제 L6 파생 규칙(경로 단위, ADMIN·APPROVER·EDITOR)이 담당한다.
+				      사용자 진입은 전문뷰어(rlms/fulltext)와 아래 JSON·신구대조·내보내기만으로 성립한다. */
+				UNION ALL SELECT v.url, r.a, v.rs FROM
+				  (SELECT '\A/rlms/prom/(treeJson|historyJson|gaejungJson|relatedListJson|provTextHstListJson).*\Z' url, 101 rs FROM DUAL
+				   UNION ALL SELECT '\A/rlms/prom/diffByPromNo.*\Z',102 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/fulltext/export(Prom|PromHistory).*\Z',103 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/related/(relDetail|attachView|attachDownload).*\Z',110 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/prommap/(view|treeJson|promListJson).*\Z',120 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/cate/selectCateTreeJson\.do.*\Z',130 FROM DUAL) v
+				  CROSS JOIN (SELECT 'ROLE_USER' a FROM DUAL UNION ALL SELECT 'ROLE_EDITOR' FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+					/* L2.5 팝업 프론트 엔드포인트(홈 자동노출): 인증된 사용자 전체.
+					   listMainPopup/openPopupManage 만 개방 — 관리화면(listPopup/registPopup 등)은 L6 /uss/ion/pwm/.* 로 ADMIN 유지 */
+					UNION ALL SELECT '\A/uss/ion/pwm/(listMainPopup|openPopupManage)\.do.*\Z','IS_AUTHENTICATED_FULLY',140 FROM DUAL
+					/* L2.5 홈 배너 이미지(cmm getImage — atchFileId 는 세션 암호화 키만 유효): 인증된 사용자 전체.
+					   배너 관리화면은 L6 /uss/ion/bnr/.* 로 ADMIN 유지 */
+					UNION ALL SELECT '\A/cmm/fms/getImage\.do.*\Z','IS_AUTHENTICATED_FULLY',141 FROM DUAL
+					/* L2.5 사용자 만족도(cop/stf/user) — 인증된 사용자 전체(등록·수정·삭제는 서버측 작성자 확인).
+					   댓글과 동일하게 JSON/AJAX 로 /cop/stf/user/.* 분리(2026-07-10). 관리 동선 /cop/stf/.* 는 L7 로 ADMIN 유지.
+					   ※ 공지 열람 개방규칙(옛 sort 142 '/cop/bbs/(selectArticleList|selectArticleDetail)')은 2026-07-10 삭제.
+					     사용자 열람은 /cop/bbs/user/.* (EgovBoardUserController) 로 분리되어 메뉴 L6 파생이 담당하고,
+					     /cop/bbs/.* 는 게시판 생성·관리·글쓰기 동선이므로 L6 '\A/cop/bbs/.*\Z' 로 ADMIN 전용을 되찾는다. */
+					UNION ALL SELECT '\A/cop/stf/user/.*\Z','IS_AUTHENTICATED_FULLY',143 FROM DUAL
+					/* L2.5 사용자 게시판 댓글(cop/cmt/user) — 인증된 사용자 전체. 메뉴 프로그램 URL 이 아니라 L6 파생이 없어 명시 규칙이 필요.
+					   수정·삭제는 서버측 작성자 확인(EgovArticleCommentController.isOwnComment)이 있다.
+					   관리 동선 /cop/cmt/.* 는 규칙 없음 → L7 로 ADMIN 유지 */
+					UNION ALL SELECT '\A/cop/cmt/user/.*\Z','IS_AUTHENTICATED_FULLY',142 FROM DUAL
+					/* L2.6 표준 olh(FAQ/QnA) 관리 액션 보호 — 사용자 메뉴의 L6 folder 파생(sort 496)보다 앞서 편집계 3역할만.
+					   olh 컨트롤러는 서버측 권한체크가 없어(FAQ 쓰기 전부·QnA 답변 4액션) URL 층이 유일한 방어.
+					   질문 등록(insertQna)·본인 질문 수정/삭제(서버측 본인확인 有)는 folder 파생으로 사용자 개방 */
+					UNION ALL SELECT v.url, r.a, v.rs FROM
+					  (SELECT '\A/uss/olh/qna/(selectQnaAnswerList|selectQnaAnswerDetail|updateQnaAnswerView|updateQnaAnswer)\.do.*\Z' url, 144 rs FROM DUAL
+					   UNION ALL SELECT '\A/uss/olh/faq/(selectFaqList|selectFaqDetail|insertFaqView|insertFaq|updateFaqView|updateFaq|deleteFaq)\.do.*\Z',145 FROM DUAL) v
+					  CROSS JOIN (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+					/* L2.7 필수열람 숙지확인(confirmDuty) — 로그인 전원. 대상자 검증은 서비스(countDutyTarget)가
+					   수행(비대상 직접 POST 는 IllegalState 로 거부). L6 파생 '\A/rlms/readduty/.*'(sort 497)보다
+					   앞서 매칭돼야 USER 도 숙지를 남길 수 있다 (2026-07-28) */
+					UNION ALL SELECT '\A/rlms/readduty/confirmDuty\.do.*\Z','IS_AUTHENTICATED_FULLY',146 FROM DUAL
+					/* L2.8 부서검색 JSON(buseoListJson) — 규정편집기·필수열람 지정 모달 공용. 편집계 3역할.
+					   기존엔 어느 규칙에도 없어 L7 폴백(ADMIN 전용)에 걸려 EDITOR 편집기의 부서검색이 403 이던
+					   결함 보정 겸 (2026-07-28) */
+					UNION ALL SELECT '\A/rlms/prom/buseoListJson\.do.*\Z', r.a, 147 FROM
+					  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+					/* L2.9 법령질의 관리 동선 보호 — 사용자 메뉴(10070000 lawQuestFrontList)와 관리 메뉴(40010000 lawQuestList)가
+					   같은 경로에 있어 L6 파생이 경로 단위로 합쳐지면서 ROLE_USER 까지 관리 화면이 열려 있던 결함 보정(2026-07-29).
+					   컨트롤러는 로그인 확인 외 역할 검사가 없어(답변권한자 확인은 회신 내용에만 적용) URL 층이 유일한 방어였고,
+					   그 결과 일반회원이 비공개 질의 열람·임의 건 수정/삭제·엑셀 전건 내려받기까지 가능했다.
+					   front 2종(lawQuestFrontList/lawQuestFrontView)만 사용자 개방이고 나머지는 편집계 3역할.
+					   첨부 내려받기는 rlms/related/attachDownload(sort 110)라 사용자 열람 동선은 그대로다. */
+					UNION ALL SELECT '\A/rlms/lawquest/(lawQuestList|lawQuestView|lawQuestRegist|lawQuestInsertDo|lawQuestUpdate|lawQuestUpdateDo|lawQuestDeleteDo|lawQuestFileDeleteDo|lawQuestExcel|lawQuestAdminList|lawQuestAdminInsertDo|lawQuestAdminDeleteDo|lawQuestUserSearch)\.do.*\Z', r.a, 148 FROM
+					  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L3 promwork list/history view: EDITOR/APPROVER/ADMIN */
+				UNION ALL SELECT '\A/rlms/promwork/(selectPromWorkList|selectPromWorkHistory).*\Z', r.a, 150 FROM
+				  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L4 promwork approve/reject: APPROVER/ADMIN (separated from editor) */
+				UNION ALL SELECT v.url, r.a, v.rs FROM
+				  (SELECT '\A/rlms/promwork/(approve|reject)PromWork.*\Z' url, 160 rs FROM DUAL
+				   UNION ALL SELECT '\A/rlms/promwork/(approve|reject)UpdatePromWork.*\Z',161 FROM DUAL) v
+				  CROSS JOIN (SELECT 'ROLE_APPROVER' a FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L4.5 필수열람 지정 API — 승인 화면과 동일 권한(APPROVER/ADMIN). 명시 규칙이 L6 파생
+				   '\A/rlms/readduty/.*'(ADMIN/EDITOR/APPROVER, sort 497)보다 앞서 EDITOR 의 지정을 차단.
+				   현황(dutyStatus/Excel)은 메뉴 45080000 의 L6 파생이 담당 (2026-07-28) */
+				UNION ALL SELECT '\A/rlms/readduty/(dutyInfoJson|saveDuty|deleteDuty|userSearchJson)\.do.*\Z', r.a, 162 FROM
+				  (SELECT 'ROLE_APPROVER' a FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L5 related edit CRUD (view is L2): EDITOR/APPROVER/ADMIN */
+				UNION ALL SELECT '\A/rlms/related/.*\Z', r.a, 200 FROM
+				  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L6 menu-derived: per-role menu(COMTNMENUCREATDTLS) - program - URL - folder/exact pattern. Menu is the single source of access.
+				       Deeper paths must match first, so role_sort is reduced by slash count (specificity). */
+				UNION ALL SELECT pattern, author_code, 500 - (LENGTH(pattern)-LENGTH(REPLACE(pattern,'/',''))) FROM (
+				  SELECT DISTINCT
+				    CASE WHEN (LENGTH(p)-LENGTH(REPLACE(p,'/',''))) &gt;= 3
+				         THEN '\A' || REGEXP_REPLACE(p, '[^/]+$', '') || '.*\Z'
+				         ELSE '\A' || REPLACE(p,'.','\.') || '(\?.*)?\Z' END pattern, author_code
+				  FROM (SELECT DISTINCT cd.AUTHOR_CODE author_code,
+				               /* 쿼리스트링 절단 — 종전 SUBSTR+NVL+NULLIF+INSTR 는 PG 미지원(NVL/INSTR).
+				                  REGEXP_REPLACE 는 Oracle/MariaDB/PG 3사 공통·동일 의미(첫 ? 부터 끝까지 제거) */
+				               REGEXP_REPLACE(pl.URL, '\?.*$', '') p
+				        FROM COMTNMENUCREATDTLS cd JOIN COMTNMENUINFO mi ON cd.MENU_NO=mi.MENU_NO
+				        JOIN COMTNPROGRMLIST pl ON mi.PROGRM_FILE_NM=pl.PROGRM_FILE_NM
+				        WHERE pl.URL IS NOT NULL AND pl.URL != 'folder') u1 ) u2
+				/* L7 everything else - admin only (safe-fail: any missing URL is ADMIN only) */
+				UNION ALL SELECT '\A/.*\.do.*\Z','ROLE_ADMIN',9999 FROM DUAL
+			) t
+			ORDER BY (role_sort + 0), url, authority
+		"
+		sqlRolesAndMethod="
+			SELECT a.ROLE_PTTRN as 	&quot;method&quot;, b.AUTHOR_CODE authority
+			FROM COMTNROLEINFO a, COMTNAUTHORROLERELATE b
+			WHERE a.ROLE_CODE = b.ROLE_CODE
+			AND a.ROLE_TY = 'method'  ORDER BY a.ROLE_SORT"
+		sqlRolesAndPointcut="
+			SELECT a.ROLE_PTTRN pointcut, b.AUTHOR_CODE authority
+			FROM COMTNROLEINFO a, COMTNAUTHORROLERELATE b
+			WHERE a.ROLE_CODE = b.ROLE_CODE
+			AND a.ROLE_TY = 'pointcut'  ORDER BY a.ROLE_SORT"
+		sqlRegexMatchedRequestMapping="
+			SELECT url uri, authority
+			FROM (
+				/* L1 entry URL - any authenticated user */
+				          SELECT '\A/uat/uia/.*\.do.*\Z' url, 'ROLE_ANONYMOUS' authority, 0 role_sort FROM DUAL
+					UNION ALL SELECT '\A/uat/uia/.*\.do.*\Z','IS_AUTHENTICATED_FULLY',0 FROM DUAL
+				/* 브랜드 이미지(로고·파비콘) — 로그인 화면 헤더와 탭 아이콘에 쓰이므로 인증 전에도 열려야 한다.
+				   읽기 전용 스트리밍이고 내용은 고객사 로고라 노출되어도 무방. 설정 화면(/uss/ion/brd/.*)은
+				   규칙을 두지 않아 L7 폴백(ADMIN)으로 관리자 전용이 유지된다 (2026-07-31) */
+					UNION ALL SELECT '\A/cmm/brand/(logo|favicon)\.do.*\Z','ROLE_ANONYMOUS',2 FROM DUAL
+					UNION ALL SELECT '\A/cmm/brand/(logo|favicon)\.do.*\Z','IS_AUTHENTICATED_FULLY',2 FROM DUAL
+					/* 포탈 공개 메인(/index.do) — 홈페이지성 첫 화면이라 비로그인 열람 허용 (2026-08-04).
+					   Globals.law.portalMain=N(관리기능만) 이면 컨트롤러가 /main.do 로 넘겨 로그인이 첫 화면 */
+						UNION ALL SELECT '\A/index\.do(\?.*)?\Z','ROLE_ANONYMOUS',3 FROM DUAL
+						UNION ALL SELECT '\A/index\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',3 FROM DUAL
+					UNION ALL SELECT '\A/main\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',1 FROM DUAL
+				UNION ALL SELECT '\A/rlms/home\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',1 FROM DUAL
+				UNION ALL SELECT '\A/rlms/mgr/dashboard\.do(\?.*)?\Z','IS_AUTHENTICATED_FULLY',1 FROM DUAL
+				/* 표준 첨부 다운로드(공지 등 COMTNFILE) — atchFileId 가 세션 암호화 키(2022.12 패치)라
+				   유추 불가·타세션 무효 → 인증 사용자 전체 개방(2026-07-08, 공지 첨부 사용자 다운로드) */
+				UNION ALL SELECT '\A/cmm/fms/FileDown\.do.*\Z','IS_AUTHENTICATED_FULLY',10 FROM DUAL
+				/* 표준 첨부 ZIP 일괄 다운로드(FileZipDown) — FileDown 과 동일 안전 논리(atchFileId 세션 암호화 키만 유효) */
+				UNION ALL SELECT '\A/cmm/fms/FileZipDown\.do.*\Z','IS_AUTHENTICATED_FULLY',11 FROM DUAL
+				/* L2 prom/related/prommap viewer reads (cross-cutting, not menu-derivable): USER/EDITOR/APPROVER/ADMIN
+				   ※ 2026-07-29: selectPromList / selectPromDetail / selectPromHistory / searchHistory 를 이 집합에서 뺐다.
+				      넷 다 관리 화면이다 — promList.jsp 는 편집·삭제·선택삭제 버튼을 그대로 그리고,
+				      searchHistory 는 같은 promList 뷰를 재사용하며, promDetail.jsp 도 수정·삭제·IDE 편집 링크를 가진다.
+				      그래서 ROLE_USER(일반회원)에게 법령 관리 목록·상세가 통째로 열려 있었다.
+				      (속성값 안이라 큰따옴표 금지 — 2026-07-29 이 주석의 따옴표가 XML 속성을 끊어 컨텍스트가 기동 못 한 실사고)
+				      이제 L6 파생 규칙(경로 단위, ADMIN·APPROVER·EDITOR)이 담당한다.
+				      사용자 진입은 전문뷰어(rlms/fulltext)와 아래 JSON·신구대조·내보내기만으로 성립한다. */
+				UNION ALL SELECT v.url, r.a, v.rs FROM
+				  (SELECT '\A/rlms/prom/(treeJson|historyJson|gaejungJson|relatedListJson|provTextHstListJson).*\Z' url, 101 rs FROM DUAL
+				   UNION ALL SELECT '\A/rlms/prom/diffByPromNo.*\Z',102 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/fulltext/export(Prom|PromHistory).*\Z',103 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/related/(relDetail|attachView|attachDownload).*\Z',110 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/prommap/(view|treeJson|promListJson).*\Z',120 FROM DUAL
+				   UNION ALL SELECT '\A/rlms/cate/selectCateTreeJson\.do.*\Z',130 FROM DUAL) v
+				  CROSS JOIN (SELECT 'ROLE_USER' a FROM DUAL UNION ALL SELECT 'ROLE_EDITOR' FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+					/* L2.5 팝업 프론트 엔드포인트(홈 자동노출): 인증된 사용자 전체.
+					   listMainPopup/openPopupManage 만 개방 — 관리화면(listPopup/registPopup 등)은 L6 /uss/ion/pwm/.* 로 ADMIN 유지 */
+					UNION ALL SELECT '\A/uss/ion/pwm/(listMainPopup|openPopupManage)\.do.*\Z','IS_AUTHENTICATED_FULLY',140 FROM DUAL
+					/* L2.5 홈 배너 이미지(cmm getImage — atchFileId 는 세션 암호화 키만 유효): 인증된 사용자 전체.
+					   배너 관리화면은 L6 /uss/ion/bnr/.* 로 ADMIN 유지 */
+					UNION ALL SELECT '\A/cmm/fms/getImage\.do.*\Z','IS_AUTHENTICATED_FULLY',141 FROM DUAL
+					/* L2.5 사용자 만족도(cop/stf/user) — 인증된 사용자 전체(등록·수정·삭제는 서버측 작성자 확인).
+					   댓글과 동일하게 JSON/AJAX 로 /cop/stf/user/.* 분리(2026-07-10). 관리 동선 /cop/stf/.* 는 L7 로 ADMIN 유지.
+					   ※ 공지 열람 개방규칙(옛 sort 142 '/cop/bbs/(selectArticleList|selectArticleDetail)')은 2026-07-10 삭제.
+					     사용자 열람은 /cop/bbs/user/.* (EgovBoardUserController) 로 분리되어 메뉴 L6 파생이 담당하고,
+					     /cop/bbs/.* 는 게시판 생성·관리·글쓰기 동선이므로 L6 '\A/cop/bbs/.*\Z' 로 ADMIN 전용을 되찾는다. */
+					UNION ALL SELECT '\A/cop/stf/user/.*\Z','IS_AUTHENTICATED_FULLY',143 FROM DUAL
+					/* L2.5 사용자 게시판 댓글(cop/cmt/user) — 인증된 사용자 전체. 메뉴 프로그램 URL 이 아니라 L6 파생이 없어 명시 규칙이 필요.
+					   수정·삭제는 서버측 작성자 확인(EgovArticleCommentController.isOwnComment)이 있다.
+					   관리 동선 /cop/cmt/.* 는 규칙 없음 → L7 로 ADMIN 유지 */
+					UNION ALL SELECT '\A/cop/cmt/user/.*\Z','IS_AUTHENTICATED_FULLY',142 FROM DUAL
+					/* L2.6 표준 olh(FAQ/QnA) 관리 액션 보호 — 사용자 메뉴의 L6 folder 파생(sort 496)보다 앞서 편집계 3역할만.
+					   olh 컨트롤러는 서버측 권한체크가 없어(FAQ 쓰기 전부·QnA 답변 4액션) URL 층이 유일한 방어.
+					   질문 등록(insertQna)·본인 질문 수정/삭제(서버측 본인확인 有)는 folder 파생으로 사용자 개방 */
+					UNION ALL SELECT v.url, r.a, v.rs FROM
+					  (SELECT '\A/uss/olh/qna/(selectQnaAnswerList|selectQnaAnswerDetail|updateQnaAnswerView|updateQnaAnswer)\.do.*\Z' url, 144 rs FROM DUAL
+					   UNION ALL SELECT '\A/uss/olh/faq/(selectFaqList|selectFaqDetail|insertFaqView|insertFaq|updateFaqView|updateFaq|deleteFaq)\.do.*\Z',145 FROM DUAL) v
+					  CROSS JOIN (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+					/* L2.7 필수열람 숙지확인(confirmDuty) — 로그인 전원. 대상자 검증은 서비스(countDutyTarget)가
+					   수행(비대상 직접 POST 는 IllegalState 로 거부). L6 파생 '\A/rlms/readduty/.*'(sort 497)보다
+					   앞서 매칭돼야 USER 도 숙지를 남길 수 있다 (2026-07-28) */
+					UNION ALL SELECT '\A/rlms/readduty/confirmDuty\.do.*\Z','IS_AUTHENTICATED_FULLY',146 FROM DUAL
+					/* L2.8 부서검색 JSON(buseoListJson) — 규정편집기·필수열람 지정 모달 공용. 편집계 3역할.
+					   기존엔 어느 규칙에도 없어 L7 폴백(ADMIN 전용)에 걸려 EDITOR 편집기의 부서검색이 403 이던
+					   결함 보정 겸 (2026-07-28) */
+					UNION ALL SELECT '\A/rlms/prom/buseoListJson\.do.*\Z', r.a, 147 FROM
+					  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+					/* L2.9 법령질의 관리 동선 보호 — 사용자 메뉴(10070000 lawQuestFrontList)와 관리 메뉴(40010000 lawQuestList)가
+					   같은 경로에 있어 L6 파생이 경로 단위로 합쳐지면서 ROLE_USER 까지 관리 화면이 열려 있던 결함 보정(2026-07-29).
+					   컨트롤러는 로그인 확인 외 역할 검사가 없어(답변권한자 확인은 회신 내용에만 적용) URL 층이 유일한 방어였고,
+					   그 결과 일반회원이 비공개 질의 열람·임의 건 수정/삭제·엑셀 전건 내려받기까지 가능했다.
+					   front 2종(lawQuestFrontList/lawQuestFrontView)만 사용자 개방이고 나머지는 편집계 3역할.
+					   첨부 내려받기는 rlms/related/attachDownload(sort 110)라 사용자 열람 동선은 그대로다. */
+					UNION ALL SELECT '\A/rlms/lawquest/(lawQuestList|lawQuestView|lawQuestRegist|lawQuestInsertDo|lawQuestUpdate|lawQuestUpdateDo|lawQuestDeleteDo|lawQuestFileDeleteDo|lawQuestExcel|lawQuestAdminList|lawQuestAdminInsertDo|lawQuestAdminDeleteDo|lawQuestUserSearch)\.do.*\Z', r.a, 148 FROM
+					  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L3 promwork list/history view: EDITOR/APPROVER/ADMIN */
+				UNION ALL SELECT '\A/rlms/promwork/(selectPromWorkList|selectPromWorkHistory).*\Z', r.a, 150 FROM
+				  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L4 promwork approve/reject: APPROVER/ADMIN (separated from editor) */
+				UNION ALL SELECT v.url, r.a, v.rs FROM
+				  (SELECT '\A/rlms/promwork/(approve|reject)PromWork.*\Z' url, 160 rs FROM DUAL
+				   UNION ALL SELECT '\A/rlms/promwork/(approve|reject)UpdatePromWork.*\Z',161 FROM DUAL) v
+				  CROSS JOIN (SELECT 'ROLE_APPROVER' a FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L4.5 필수열람 지정 API — 승인 화면과 동일 권한(APPROVER/ADMIN). 명시 규칙이 L6 파생
+				   '\A/rlms/readduty/.*'(ADMIN/EDITOR/APPROVER, sort 497)보다 앞서 EDITOR 의 지정을 차단.
+				   현황(dutyStatus/Excel)은 메뉴 45080000 의 L6 파생이 담당 (2026-07-28) */
+				UNION ALL SELECT '\A/rlms/readduty/(dutyInfoJson|saveDuty|deleteDuty|userSearchJson)\.do.*\Z', r.a, 162 FROM
+				  (SELECT 'ROLE_APPROVER' a FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L5 related edit CRUD (view is L2): EDITOR/APPROVER/ADMIN */
+				UNION ALL SELECT '\A/rlms/related/.*\Z', r.a, 200 FROM
+				  (SELECT 'ROLE_EDITOR' a FROM DUAL UNION ALL SELECT 'ROLE_APPROVER' FROM DUAL UNION ALL SELECT 'ROLE_ADMIN' FROM DUAL) r
+				/* L6 menu-derived: per-role menu(COMTNMENUCREATDTLS) - program - URL - folder/exact pattern. Menu is the single source of access.
+				       Deeper paths must match first, so role_sort is reduced by slash count (specificity). */
+				UNION ALL SELECT pattern, author_code, 500 - (LENGTH(pattern)-LENGTH(REPLACE(pattern,'/',''))) FROM (
+				  SELECT DISTINCT
+				    CASE WHEN (LENGTH(p)-LENGTH(REPLACE(p,'/',''))) &gt;= 3
+				         THEN '\A' || REGEXP_REPLACE(p, '[^/]+$', '') || '.*\Z'
+				         ELSE '\A' || REPLACE(p,'.','\.') || '(\?.*)?\Z' END pattern, author_code
+				  FROM (SELECT DISTINCT cd.AUTHOR_CODE author_code,
+				               /* 쿼리스트링 절단 — 종전 SUBSTR+NVL+NULLIF+INSTR 는 PG 미지원(NVL/INSTR).
+				                  REGEXP_REPLACE 는 Oracle/MariaDB/PG 3사 공통·동일 의미(첫 ? 부터 끝까지 제거) */
+				               REGEXP_REPLACE(pl.URL, '\?.*$', '') p
+				        FROM COMTNMENUCREATDTLS cd JOIN COMTNMENUINFO mi ON cd.MENU_NO=mi.MENU_NO
+				        JOIN COMTNPROGRMLIST pl ON mi.PROGRM_FILE_NM=pl.PROGRM_FILE_NM
+				        WHERE pl.URL IS NOT NULL AND pl.URL != 'folder') u1 ) u2
+				/* L7 everything else - admin only (safe-fail: any missing URL is ADMIN only) */
+				UNION ALL SELECT '\A/.*\.do.*\Z','ROLE_ADMIN',9999 FROM DUAL
+			) t
+			ORDER BY (role_sort + 0), url, authority
+		"
+	/>
+
+	<egov-security:initializer id="initializer" supportMethod="true" supportPointcut="false" />
+
+	<!-- @PreAuthorize / @PostAuthorize 어노테이션 활성화 (RLMS A 작업) -->
+	<!--
+	  2026-06-02 검증: egov 의 sqlHierarchicalRoles(COMTNROLES_HIERARCHY) 는 URL 보안에만 적용되고
+	  @PreAuthorize(메서드 보안)이 쓰는 expression-handler 에는 RoleHierarchy 가 주입되지 않아
+	  ROLE_ADMIN 만 가진 사용자가 hasAuthority('AUTH_PGM_*') 검사에서 전부 거부되던 문제 수정.
+	  → 메서드 보안 expression-handler 에 RoleHierarchy 를 명시 주입 (rlms_role_simplify_seed.sql 과 동일 계층).
+	-->
+	<security:global-method-security pre-post-annotations="enabled">
+		<security:expression-handler ref="rlmsMethodSecurityExpressionHandler"/>
+	</security:global-method-security>
+
+	<bean id="rlmsMethodSecurityExpressionHandler"
+	      class="org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler">
+		<property name="roleHierarchy" ref="rlmsRoleHierarchy"/>
+	</bean>
+
+	<bean id="rlmsRoleHierarchy"
+	      class="org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl">
+		<property name="hierarchy">
+			<value>
+				ROLE_ADMIN > ROLE_APPROVER
+				ROLE_APPROVER > ROLE_EDITOR
+				ROLE_EDITOR > ROLE_USER
+				ROLE_ADMIN > ROLE_LAW_MGR
+				ROLE_LAW_MGR > ROLE_USER
+				ROLE_USER > AUTH_USR_FRONT
+				ROLE_USER > AUTH_USR_PROM_VIEW
+				ROLE_USER > AUTH_USR_MEMO
+				ROLE_USER > AUTH_USR_FAVOR
+				ROLE_EDITOR > AUTH_PGM_001_01_01
+				ROLE_EDITOR > AUTH_PGM_001_01_02
+				ROLE_EDITOR > AUTH_PGM_001_01_03
+				ROLE_EDITOR > AUTH_PGM_001_01_04
+				ROLE_EDITOR > AUTH_PGM_001_01_07
+				ROLE_EDITOR > AUTH_PGM_001_01_08
+				ROLE_EDITOR > AUTH_PGM_001_01_09
+				ROLE_EDITOR > AUTH_PGM_001_01_11
+				ROLE_EDITOR > AUTH_PGM_001_01_12
+				ROLE_EDITOR > AUTH_PGM_001_01_14
+				ROLE_EDITOR > AUTH_PGM_001_04_01
+				ROLE_EDITOR > AUTH_PGM_001_04_03
+				ROLE_EDITOR > AUTH_PGM_001_04_08
+				ROLE_ADMIN > AUTH_SYS_OPR
+				ROLE_ADMIN > AUTH_PGM_001_02_01
+				ROLE_ADMIN > AUTH_PGM_001_02_02
+				ROLE_ADMIN > AUTH_PGM_001_02_03
+				ROLE_ADMIN > AUTH_PGM_001_02_04
+				ROLE_ADMIN > AUTH_PGM_001_02_05
+				ROLE_ADMIN > AUTH_PGM_001_02_06
+				ROLE_ADMIN > AUTH_PGM_001_02_07
+				ROLE_ADMIN > AUTH_PGM_001_02_08
+				ROLE_ADMIN > AUTH_PGM_001_02_09
+				ROLE_ADMIN > AUTH_PGM_001_02_10
+				ROLE_ADMIN > AUTH_PGM_001_04_02
+				ROLE_ADMIN > AUTH_PGM_001_04_04
+				ROLE_ADMIN > AUTH_PGM_001_04_05
+				ROLE_ADMIN > AUTH_PGM_001_04_06
+				ROLE_ADMIN > AUTH_PGM_001_04_07
+				ROLE_ADMIN > AUTH_PGM_001_04_09
+				ROLE_ADMIN > AUTH_PGM_001_04_10
+				ROLE_ADMIN > AUTH_PGM_001_04_11
+			</value>
+		</property>
+	</bean>
+
+    <!-- URL에 세미콜론(semicolon)허용 여부(기본값/false) -->
+	<!-- 
+	<bean id="egovStrictHttpFirewall" class="org.springframework.security.web.firewall.StrictHttpFirewall">
+		<property name="allowSemicolon" value="true"/>
+	</bean>
+	<security:http-firewall ref="egovStrictHttpFirewall"/>
+	-->
+
+</beans>

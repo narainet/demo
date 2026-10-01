@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/req/Law_Req_SQL_postgres.xml
+  소송의뢰(LAW_SUIT_REQ / _HIST / _HELPER) — 신청·수정·삭제·승인/반려·소송등록 연계. §7.8·§7.9·§4.3
+-->
+<mapper namespace="narainet.law.req.mapper.LawReqMapper">
+
+	<sql id="reqCols">
+		R.REQ_ID        AS reqId,
+		R.REQ_TITL      AS reqTitl,
+		R.REQ_CN        AS reqCn,
+		R.REQ_ORGNZT_ID AS reqOrgnztId,
+		OG.ORGNZT_NM    AS reqOrgnztNm,
+		R.REQ_USER_ID   AS reqUserId,
+		R.REQ_USER_NM   AS reqUserNm,
+		R.REQ_DT        AS reqDt,
+		R.STATUS_CD     AS statusCd,
+		ST.CODE_NM      AS statusNm,
+		R.APRV_USER_ID  AS aprvUserId,
+		R.APRV_USER_NM  AS aprvUserNm,
+		R.APRV_DT       AS aprvDt,
+		R.RETURN_RSN    AS returnRsn,
+		R.SUIT_ID       AS suitId,
+		LS.CASE_NO      AS caseNo,
+		R.ATCH_FILE_ID  AS atchFileId,
+		R.REG_USER_ID   AS regUserId,
+		R.REG_DT        AS regDt,
+		R.UPD_USER_ID   AS updUserId,
+		R.UPD_DT        AS updDt
+	</sql>
+
+	<sql id="reqFrom">
+		FROM LAW_SUIT_REQ R
+		LEFT OUTER JOIN COMTNORGNZTINFO OG ON OG.ORGNZT_ID = R.REQ_ORGNZT_ID
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE ST ON ST.CODE_ID = 'LAW_REQ_STATUS' AND ST.CODE = R.STATUS_CD
+		LEFT OUTER JOIN LAW_SUIT LS ON LS.SUIT_ID = R.SUIT_ID AND LS.DEL_YN = 'N'
+	</sql>
+
+	<sql id="searchWhere">
+		<if test='searchFrom != null and searchFrom != ""'>
+		  AND SUBSTR(R.REG_DT, 1, 8) <![CDATA[>=]]> #{searchFrom}
+		</if>
+		<if test='searchTo != null and searchTo != ""'>
+		  AND SUBSTR(R.REG_DT, 1, 8) <![CDATA[<=]]> #{searchTo}
+		</if>
+		<if test='searchStatus != null and searchStatus != ""'>
+		  AND R.STATUS_CD = #{searchStatus}
+		</if>
+		<if test='searchKeyword != null and searchKeyword != ""'>
+		  AND R.REQ_TITL LIKE '%' || #{searchKeyword} || '%'
+		</if>
+		<if test='regUserId != null and regUserId != ""'>
+		  AND R.REG_USER_ID = #{regUserId}
+		</if>
+	</sql>
+
+	<select id="selectReqCnt" parameterType="narainet.law.req.service.LawSuitReqVO" resultType="int">
+		SELECT COUNT(*)
+		FROM LAW_SUIT_REQ R
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectReqList" parameterType="narainet.law.req.service.LawSuitReqVO"
+	        resultType="narainet.law.req.service.LawSuitReqVO">
+		SELECT <include refid="reqCols"/>
+		                <include refid="reqFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="searchWhere"/>
+		                 ORDER BY R.REQ_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="selectReq" resultType="narainet.law.req.service.LawSuitReqVO">
+		SELECT <include refid="reqCols"/>
+		<include refid="reqFrom"/>
+		 WHERE R.REQ_ID = #{reqId}
+	</select>
+
+	<insert id="insertReq" parameterType="narainet.law.req.service.LawSuitReqVO">
+		INSERT INTO LAW_SUIT_REQ (
+			REQ_ID, REQ_TITL, REQ_CN, REQ_ORGNZT_ID, REQ_USER_ID, REQ_USER_NM,
+			REQ_DT, STATUS_CD, ATCH_FILE_ID, REG_USER_ID, REG_DT
+		) VALUES (
+			#{reqId}, #{reqTitl, jdbcType=VARCHAR}, #{reqCn, jdbcType=VARCHAR},
+			#{reqOrgnztId, jdbcType=CHAR}, #{reqUserId, jdbcType=VARCHAR}, #{reqUserNm, jdbcType=VARCHAR},
+			#{reqDt, jdbcType=VARCHAR}, #{statusCd}, #{atchFileId, jdbcType=CHAR},
+			#{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateReq" parameterType="narainet.law.req.service.LawSuitReqVO">
+		UPDATE LAW_SUIT_REQ
+		   SET REQ_TITL     = #{reqTitl, jdbcType=VARCHAR},
+		       REQ_CN       = #{reqCn, jdbcType=VARCHAR},
+		       ATCH_FILE_ID = #{atchFileId, jdbcType=CHAR},
+		       STATUS_CD    = 'S001',
+		       UPD_USER_ID  = #{updUserId},
+		       UPD_DT       = #{updDt}
+		 WHERE REQ_ID = #{reqId}
+	</update>
+
+	<delete id="deleteReq">
+		DELETE FROM LAW_SUIT_REQ WHERE REQ_ID = #{reqId}
+	</delete>
+
+	<update id="updateApproval" parameterType="narainet.law.req.service.LawSuitReqVO">
+		UPDATE LAW_SUIT_REQ
+		   SET STATUS_CD    = #{statusCd},
+		       APRV_USER_ID = #{aprvUserId, jdbcType=VARCHAR},
+		       APRV_USER_NM = #{aprvUserNm, jdbcType=VARCHAR},
+		       APRV_DT      = TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS'),
+		       RETURN_RSN   = #{returnRsn, jdbcType=VARCHAR}
+		 WHERE REQ_ID = #{reqId}
+	</update>
+
+	<update id="updateSuitLink" parameterType="narainet.law.req.service.LawSuitReqVO">
+		UPDATE LAW_SUIT_REQ
+		   SET SUIT_ID     = #{suitId},
+		       UPD_USER_ID = #{updUserId},
+		       UPD_DT      = #{updDt}
+		 WHERE REQ_ID = #{reqId}
+	</update>
+
+	<select id="selectPendingCnt" resultType="int">
+		SELECT COUNT(*) FROM LAW_SUIT_REQ WHERE STATUS_CD = 'S001'
+	</select>
+
+	<!-- ── 경과 내역 ─────────────────────────────────────── -->
+	<select id="selectHistList" resultType="narainet.law.req.service.LawSuitReqHistVO">
+		SELECT HIST_ID      AS histId,
+		       REQ_ID       AS reqId,
+		       STA_DT       AS staDt,
+		       END_DT       AS endDt,
+		       HIST_CN      AS histCn,
+		       ATCH_FILE_ID AS atchFileId,
+		       SORT_ORDR    AS sortOrdr
+		  FROM LAW_SUIT_REQ_HIST
+		 WHERE REQ_ID = #{reqId}
+		 ORDER BY SORT_ORDR, HIST_ID
+	</select>
+
+	<insert id="insertHist" parameterType="narainet.law.req.service.LawSuitReqHistVO">
+		INSERT INTO LAW_SUIT_REQ_HIST (
+			HIST_ID, REQ_ID, STA_DT, END_DT, HIST_CN, ATCH_FILE_ID, SORT_ORDR, REG_USER_ID, REG_DT
+		) VALUES (
+			#{histId}, #{reqId}, #{staDt, jdbcType=VARCHAR}, #{endDt, jdbcType=VARCHAR},
+			#{histCn, jdbcType=VARCHAR}, #{atchFileId, jdbcType=CHAR}, #{sortOrdr}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<delete id="deleteHists">
+		DELETE FROM LAW_SUIT_REQ_HIST WHERE REQ_ID = #{reqId}
+	</delete>
+
+	<!-- ── 보조자 ────────────────────────────────────────── -->
+	<select id="selectHelperList" resultType="narainet.law.req.service.LawSuitReqHelperVO">
+		SELECT HELPER_ID AS helperId,
+		       REQ_ID    AS reqId,
+		       DEPT_NM   AS deptNm,
+		       HELPER_NM AS helperNm,
+		       TEL       AS tel,
+		       MOBILE    AS mobile,
+		       EMAIL     AS email,
+		       SORT_ORDR AS sortOrdr
+		  FROM LAW_SUIT_REQ_HELPER
+		 WHERE REQ_ID = #{reqId}
+		 ORDER BY SORT_ORDR, HELPER_ID
+	</select>
+
+	<insert id="insertHelper" parameterType="narainet.law.req.service.LawSuitReqHelperVO">
+		INSERT INTO LAW_SUIT_REQ_HELPER (
+			HELPER_ID, REQ_ID, DEPT_NM, HELPER_NM, TEL, MOBILE, EMAIL, SORT_ORDR, REG_USER_ID, REG_DT
+		) VALUES (
+			#{helperId}, #{reqId}, #{deptNm, jdbcType=VARCHAR}, #{helperNm, jdbcType=VARCHAR},
+			#{tel, jdbcType=VARCHAR}, #{mobile, jdbcType=VARCHAR}, #{email, jdbcType=VARCHAR},
+			#{sortOrdr}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<delete id="deleteHelpers">
+		DELETE FROM LAW_SUIT_REQ_HELPER WHERE REQ_ID = #{reqId}
+	</delete>
+
+</mapper>

@@ -1,0 +1,598 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/prom/ProvVrsn_SQL_postgres.xml
+
+  조항 본문 단위 row(TB_PROV_VRSN) MyBatis 매핑.
+
+  핵심:
+   - insertProvVrsnBatch: BodyParser 분해 결과를 일괄 INSERT
+   - selectDiffByPromNo : 두 promNo 의 row 집합을 FULL OUTER JOIN ON SFULL_ITEM
+                          → DiffLineVO 결과 (java-diff-utils 불필요한 메인 비교)
+   - selectFullTextSearch: Oracle Text CONTAINS() 검색 + SCORE(1) rank
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.prom.mapper.ProvVrsnMapper">
+
+	<resultMap id="provVrsnResult" type="narainet.rlms.prom.service.ProvVrsnVO">
+		<result property="provVrsnNo"     column="IPVRSN_NO"/>
+		<result property="promNo"         column="IPROM_NO"/>
+		<result property="fullItem"       column="SFULL_ITEM"/>
+		<result property="item"           column="SITEM"/>
+		<result property="subItem"        column="SSUB_ITEM"/>
+		<result property="moveFullItem"   column="SMOVE_FULL_ITEM"/>
+		<result property="unitType"       column="SUNIT_TYPE"/>
+		<result property="nativeType"     column="SNATIVE_TYPE"/>
+		<result property="styleId"        column="SSTYLE_ID"/>
+		<result property="level"          column="ILEVEL"/>
+		<result property="index"          column="IINDEX"/>
+		<result property="title"          column="STITLE"/>
+		<result property="contents"       column="SCONTENTS"/>
+		<result property="reason"         column="SREASON"/>
+		<result property="searchText"     column="SSEARCH_TEXT"/>
+		<result property="gaejungType"    column="SGAEJUNG_TYPE"/>
+		<result property="gaejungHideYn"  column="SGAEJUNG_HIDE_YN"/>
+		<result property="userModifiedYn" column="SUSER_MODIFIED_YN"/>
+		<result property="dispYn"         column="SDISP_YN"/>
+		<result property="startDate"      column="SSTART_DT"/>
+		<result property="insDt"          column="SINS_DT"/>
+		<result property="sysId"          column="SSYS_ID"/>
+		<result property="rank"           column="RANK"/>
+	</resultMap>
+
+	<resultMap id="diffLineResult" type="narainet.rlms.prom.service.DiffLineVO">
+		<result property="fullItem"     column="FULL_ITEM"/>
+		<result property="leftText"     column="LEFT_TEXT"/>
+		<result property="rightText"    column="RIGHT_TEXT"/>
+		<result property="changeType"   column="CHANGE_TYPE"/>
+		<result property="gaejungType"  column="GAEJUNG_TYPE"/>
+		<result property="moveFullItem" column="MOVE_FULL_ITEM"/>
+	</resultMap>
+
+	<select id="selectProvVrsnList" resultMap="provVrsnResult">
+		SELECT IPVRSN_NO, IPROM_NO, SFULL_ITEM, SITEM, SSUB_ITEM, SMOVE_FULL_ITEM,
+		       SUNIT_TYPE, SNATIVE_TYPE, SSTYLE_ID, ILEVEL, IINDEX,
+		       STITLE, SCONTENTS, SREASON, SSEARCH_TEXT,
+		       SGAEJUNG_TYPE, SGAEJUNG_HIDE_YN, SUSER_MODIFIED_YN,
+		       SDISP_YN, SSTART_DT, SINS_DT, SSYS_ID,
+		       NULL AS RANK
+		  FROM TB_PROV_VRSN
+		 WHERE IPROM_NO = #{promNo}
+		 ORDER BY ILEVEL, IINDEX, SFULL_ITEM
+	</select>
+
+	<select id="selectProvVrsnByFullItem" resultMap="provVrsnResult">
+		SELECT IPVRSN_NO, IPROM_NO, SFULL_ITEM, SITEM, SSUB_ITEM, SMOVE_FULL_ITEM,
+		       SUNIT_TYPE, SNATIVE_TYPE, SSTYLE_ID, ILEVEL, IINDEX,
+		       STITLE, SCONTENTS, SREASON, SSEARCH_TEXT,
+		       SGAEJUNG_TYPE, SGAEJUNG_HIDE_YN, SUSER_MODIFIED_YN,
+		       SDISP_YN, SSTART_DT, SINS_DT, SSYS_ID,
+		       NULL AS RANK
+		  FROM TB_PROV_VRSN
+		 WHERE IPROM_NO   = #{promNo}
+		   AND SFULL_ITEM = #{fullItem}
+	</select>
+
+	<!--
+	  조 row + 그 자식 항/호/목 모두 — 단건 조 화면 본문 조립용 (누적 모델).
+	  레거시 ProvisionVersionService.getSelectSql 의 누적 패턴 활용:
+	  같은 lawId 의 lawNo ≤ 현재 회차 회차들 중 SFULL_ITEM 별 최신 회차의 행.
+	  (각 회차는 변경/신규만 저장하므로 단순 IPROM_NO=? 로는 누락)
+	  SFULL_ITEM 30 자(편/장/절/관/목/조 청크) prefix 일치 = 그 조 아래 모든 sub_text.
+	-->
+	<select id="selectProvVrsnAndSubItemsCumulative" resultMap="provVrsnResult">
+		SELECT PV.IPVRSN_NO, PV.IPROM_NO, PV.SFULL_ITEM, PV.SITEM, PV.SSUB_ITEM, PV.SMOVE_FULL_ITEM,
+		       PV.SUNIT_TYPE, PV.SNATIVE_TYPE, PV.SSTYLE_ID, PV.ILEVEL, PV.IINDEX,
+		       PV.STITLE, PV.SCONTENTS, PV.SREASON, PV.SSEARCH_TEXT,
+		       PV.SGAEJUNG_TYPE, PV.SGAEJUNG_HIDE_YN, PV.SUSER_MODIFIED_YN,
+		       PV.SDISP_YN, PV.SSTART_DT, PV.SINS_DT, PV.SSYS_ID,
+		       NULL AS RANK
+		  FROM TB_PROV_VRSN PV
+		  JOIN TB_PROM PR ON PV.IPROM_NO = PR.IPROM_NO
+		 WHERE PR.ILAW_ID = #{lawId}
+		   <![CDATA[ AND PR.ILAW_NO <= #{lawNo} ]]>
+		   AND PV.SDISP_YN = 'Y'
+		   AND SUBSTR(PV.SFULL_ITEM, 1, 30) = SUBSTR(#{fullItem}, 1, 30)
+		   AND (PR.ILAW_NO, PV.SFULL_ITEM) IN (
+		     SELECT MAX(PR2.ILAW_NO), PV2.SFULL_ITEM
+		       FROM TB_PROV_VRSN PV2
+		       JOIN TB_PROM PR2 ON PV2.IPROM_NO = PR2.IPROM_NO
+		      WHERE PR2.ILAW_ID = #{lawId}
+		        <![CDATA[ AND PR2.ILAW_NO <= #{lawNo} ]]>
+		        AND PV2.SDISP_YN = 'Y'
+		        AND SUBSTR(PV2.SFULL_ITEM, 1, 30) = SUBSTR(#{fullItem}, 1, 30)
+		      GROUP BY PV2.SFULL_ITEM
+		   )
+		 ORDER BY PV.SFULL_ITEM
+	</select>
+
+	<!-- ============================================================ -->
+	<!-- 규정 편집 IDE 조항 트리 (회차 > 장 > (절) > 조)                -->
+	<!--                                                              -->
+	<!-- SFULL_ITEM = STYLE_NORMAL 기준 5자 × 12단계 = 60자 고정폭.    -->
+	<!--   [1..5] 편 / [6..10] 장 / [11..15] 절 / [16..20] 관 /        -->
+	<!--   [21..25] 목 / [26..30] 조(BASE_TEXT) / [31..60] 항·호 등.   -->
+	<!--   각 5자 = SITEM(3) + SSUB_ITEM(2). 사전순 정렬 = 트리 순서.   -->
+	<!--                                                              -->
+	<!-- ★ 누적(상속) 조회 — 레거시 ProvisionVersionService.getSelectSql 이식.  -->
+	<!--   한 회차의 전체 본문 = 같은 lawId 회차들(ILAW_NO ≤ 이 회차) 중   -->
+	<!--   SFULL_ITEM 별 "최신 회차"의 행. (각 회차는 변경/신규 조항만 저장  -->
+	<!--   하므로 단순 WHERE IPROM_NO=? 로는 누락됨 — 트리가 안 펼쳐지는 원인) -->
+	<!--   필터(nativeType/unitType/prefix)는 안쪽 서브쿼리에. 바깥 PV 는      -->
+	<!--   항상 SDISP_YN='Y' (레거시 의 unconditional 필터 — 삭제 조항 숨김).    -->
+	<!-- ============================================================ -->
+
+	<sql id="provVrsnCols">
+		IPVRSN_NO, IPROM_NO, SFULL_ITEM, SITEM, SSUB_ITEM, SMOVE_FULL_ITEM,
+		SUNIT_TYPE, SNATIVE_TYPE, SSTYLE_ID, ILEVEL, IINDEX,
+		STITLE, SCONTENTS, SREASON, SSEARCH_TEXT,
+		SGAEJUNG_TYPE, SGAEJUNG_HIDE_YN, SUSER_MODIFIED_YN,
+		SDISP_YN, SSTART_DT, SINS_DT, SSYS_ID,
+		NULL AS RANK
+	</sql>
+
+	<!-- 누적 조회 SELECT 절 (PV 별칭) — 각 select 가 FROM ... GROUP BY 까지 직접 작성 -->
+	<sql id="cumulativeSelectCols">
+		SELECT PV.IPVRSN_NO, PV.IPROM_NO, PV.SFULL_ITEM, PV.SITEM, PV.SSUB_ITEM, PV.SMOVE_FULL_ITEM,
+		       PV.SUNIT_TYPE, PV.SNATIVE_TYPE, PV.SSTYLE_ID, PV.ILEVEL, PV.IINDEX,
+		       PV.STITLE, PV.SCONTENTS, PV.SREASON, PV.SSEARCH_TEXT,
+		       PV.SGAEJUNG_TYPE, PV.SGAEJUNG_HIDE_YN, PV.SUSER_MODIFIED_YN,
+		       PV.SDISP_YN, PV.SSTART_DT, PV.SINS_DT, PR.SSYS_ID,
+		       NULL AS RANK
+	</sql>
+	<sql id="cumulativeOuterJoin">
+		 WHERE PV.SFULL_ITEM = M.SFULL_ITEM
+		   AND PR.ILAW_NO    = M.ILAW_NO
+		   AND PR.ILAW_ID    = #{lawId}
+		   AND PV.IPROM_NO   = PR.IPROM_NO
+		   AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+		 ORDER BY PV.SFULL_ITEM
+	</sql>
+
+	<!-- 최상위 그룹: 장(F_JANG) — 누적 -->
+	<select id="selectTopGroupNodes" resultMap="provVrsnResult">
+		<include refid="cumulativeSelectCols"/>
+		  FROM TB_PROV_VRSN PV, TB_PROM PR,
+		     ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = #{lawId}
+		          AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		          AND PV2.SNATIVE_TYPE = 'F_JANG'
+		        GROUP BY PV2.SFULL_ITEM ) M
+		<include refid="cumulativeOuterJoin"/>
+	</select>
+
+	<!-- 장 구조가 없는 법령용: 조(BASE_TEXT) 평면 — 누적 -->
+	<select id="selectBaseTextNodes" resultMap="provVrsnResult">
+		<include refid="cumulativeSelectCols"/>
+		  FROM TB_PROV_VRSN PV, TB_PROM PR,
+		     ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = #{lawId}
+		          AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		          AND PV2.SUNIT_TYPE = 'BASE_TEXT'
+		        GROUP BY PV2.SFULL_ITEM ) M
+		<include refid="cumulativeOuterJoin"/>
+	</select>
+
+	<!-- 일괄 편집기용: 회차의 모든 누적 행 (장/절/조/항/호 등 전부, SFULL_ITEM 순) -->
+	<!--
+	  회차 단위 저장 직렬화 락 (2026-07-30).
+	  조문 저장은 "회차 소유행 전량 DELETE 후 재INSERT" 라, 같은 회차에 두 저장이 겹치면
+	  뒤 트랜잭션의 DELETE 가 앞 트랜잭션이 아직 커밋하지 않은 INSERT 를 못 보고 지나가
+	  두 벌이 모두 남는다(= 조문 2중 저장, 고객 테스트 2026-07-22 지적).
+	  저장 진입점에서 회차 행을 FOR UPDATE 로 잡아 두 번째 요청을 앞 트랜잭션 커밋까지 대기시킨다.
+	-->
+	<select id="lockPromForUpdate" resultType="java.lang.Long">
+		SELECT IPROM_NO FROM TB_PROM WHERE IPROM_NO = #{promNo} FOR UPDATE
+	</select>
+
+	<!-- 직전 회차 ILAW_NO (개정유형 분류·삭제 tombstone 비교 기준선). 없으면 null = 제정 회차 -->
+	<select id="selectPrevLawNo" resultType="java.lang.Long">
+		SELECT MAX(ILAW_NO)
+		  FROM TB_PROM
+		 WHERE ILAW_ID = #{lawId}
+		   <![CDATA[ AND ILAW_NO < #{lawNo} ]]>
+		   AND COALESCE(SDISP_YN, 'Y') = 'Y'
+	</select>
+
+	<select id="selectAllCumulative" resultMap="provVrsnResult">
+		<include refid="cumulativeSelectCols"/>
+		  FROM TB_PROV_VRSN PV, TB_PROM PR,
+		     ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = #{lawId}
+		          AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		        GROUP BY PV2.SFULL_ITEM ) M
+		<include refid="cumulativeOuterJoin"/>
+	</select>
+
+	<!--
+	  한 그룹(장 또는 절) 노드의 직속 자식 — 누적.
+	    · 직속 조  : SUNIT_TYPE='BASE_TEXT' AND 앞 25자(조 청크 이전 전부) 가 부모와 동일
+	                 → 부모의 절/관/목 청크가 0 이므로 "더 깊은 그룹 밑에 있지 않은" 조만.
+	    · 직속 절  : SNATIVE_TYPE='F_JEOL' AND 앞 10자(편+장) 동일 AND 부모의 절 청크가 0
+	                 (= 부모가 장일 때만 절을 자식으로).
+	  RPAD(CAST(... AS text), 60, '0') 로 짧은 값 방어. prefix 는 회차 무관(고정)이라 안쪽 서브쿼리에 둔다.
+	-->
+	<select id="selectGroupChildren" resultMap="provVrsnResult">
+		<include refid="cumulativeSelectCols"/>
+		  FROM TB_PROV_VRSN PV, TB_PROM PR,
+		     ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = #{lawId}
+		          AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		          AND PV2.SFULL_ITEM <![CDATA[ <> ]]> #{parentFullItem}
+		          AND (
+		                ( PV2.SUNIT_TYPE = 'BASE_TEXT'
+		                  AND SUBSTR(RPAD(CAST(PV2.SFULL_ITEM AS text), 60, '0'), 1, 25)
+		                    = SUBSTR(RPAD(CAST(#{parentFullItem} AS text), 60, '0'), 1, 25) )
+		             OR ( PV2.SNATIVE_TYPE = 'F_JEOL'
+		                  AND SUBSTR(RPAD(CAST(PV2.SFULL_ITEM AS text), 60, '0'), 1, 10)
+		                    = SUBSTR(RPAD(CAST(#{parentFullItem} AS text), 60, '0'), 1, 10)
+		                  AND SUBSTR(RPAD(CAST(#{parentFullItem} AS text), 60, '0'), 11, 5) = '00000' )
+		              )
+		        GROUP BY PV2.SFULL_ITEM ) M
+		<include refid="cumulativeOuterJoin"/>
+	</select>
+
+	<!-- 조항 단위 row 본문/제목/사유/개정유형 in-place 갱신 (재분해 안 함 — IDE 의 단건 조 편집용) -->
+	<update id="updateProvVrsnContent" parameterType="narainet.rlms.prom.service.ProvVrsnVO">
+		UPDATE TB_PROV_VRSN
+		   SET STITLE        = #{title},
+		       SCONTENTS     = #{contents},
+		       SREASON       = #{reason},
+		       SGAEJUNG_TYPE = #{gaejungType},
+		       SSTART_DT     = #{startDate},
+		       SUSER_MODIFIED_YN = 'Y'
+		 WHERE IPROM_NO   = #{promNo}
+		   AND SFULL_ITEM = #{fullItem}
+	</update>
+
+	<!--
+	  배치 INSERT — Oracle 의 INSERT ALL 패턴.
+	  각 row 의 IPVRSN_NO 는 ServiceImpl 에서 사전 채번.
+	-->
+	<insert id="insertProvVrsnBatch" parameterType="java.util.List">
+		<!-- Oracle INSERT ALL → MariaDB 다중 VALUES -->
+		INSERT INTO TB_PROV_VRSN (
+			IPVRSN_NO, IPROM_NO, SFULL_ITEM, SITEM, SSUB_ITEM, SMOVE_FULL_ITEM,
+			SUNIT_TYPE, SNATIVE_TYPE, SSTYLE_ID, ILEVEL, IINDEX,
+			STITLE, SCONTENTS, SREASON, SSEARCH_TEXT,
+			SGAEJUNG_TYPE, SGAEJUNG_HIDE_YN, SUSER_MODIFIED_YN,
+			SDISP_YN, SSTART_DT, SINS_DT
+		) VALUES
+		<foreach collection="list" item="v" separator=",">
+			(
+				#{v.provVrsnNo}, #{v.promNo}, #{v.fullItem}, #{v.item}, #{v.subItem},
+				#{v.moveFullItem},
+				#{v.unitType}, #{v.nativeType}, #{v.styleId}, #{v.level}, #{v.index},
+				#{v.title}, #{v.contents}, #{v.reason},
+				#{v.searchText},
+				#{v.gaejungType}, #{v.gaejungHideYn}, #{v.userModifiedYn},
+				#{v.dispYn}, #{v.startDate},
+				TO_CHAR(LOCALTIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+			)
+		</foreach>
+	</insert>
+
+	<delete id="deleteProvVrsnByPromNo">
+		DELETE FROM TB_PROV_VRSN WHERE IPROM_NO = #{promNo}
+	</delete>
+
+	<!--
+	  단건 "조문별 수정" — 이 회차가 소유한 한 조의 subtree 만 삭제.
+	  prefix30 = 조 SFULL_ITEM 앞 30자(편/장/절/관/목1/조). 그 조 + 항/호/목(앞30자 동일) 만 매칭,
+	  다른 조나 장/절 그룹행(조 청크 00000)은 제외.
+	-->
+	<delete id="deleteProvVrsnBySubtreePrefix">
+		DELETE FROM TB_PROV_VRSN
+		 WHERE IPROM_NO = #{promNo}
+		   AND SUBSTR(SFULL_ITEM, 1, 30) = #{prefix30}
+	</delete>
+
+	<!--
+	  메인 비교 알고리즘 — 두 회차의 *누적* row 집합을 SFULL_ITEM 으로 FULL OUTER JOIN.
+	  각 회차는 변경/신규 행만 저장하므로 단순 WHERE IPROM_NO=? 비교는 부정확
+	  (200차 vs 190차에서 변경 안 된 조항은 양쪽 모두 누락 → UNCHANGED 도 안 나옴).
+	  → 각 회차의 "보여줄 전체 본문" = 같은 lawId 회차들(ILAW_NO ≤ 그 회차) 중 SFULL_ITEM 별 최신 행.
+	  PG 는 TEXT 를 직접 비교할 수 있어 IS DISTINCT FROM 으로 동등성 판정(CLOB 함수 불요).
+	  WITH 절로 양쪽 누적뷰를 각각 만들어 비교.
+	  ※ 양쪽 SCONTENTS 가 모두 NULL(장/절 등 본문 없는 구조 노드)이면 동일로 보고 UNCHANGED.
+	    IS DISTINCT FROM 은 NULL=NULL 을 같음으로 다루므로 그 자체로도 안전하나, 선행 WHEN 이 명시 처리한다.
+	-->
+	<select id="selectDiffByPromNo" resultMap="diffLineResult">
+		WITH LP AS (SELECT ILAW_ID, ILAW_NO FROM TB_PROM WHERE IPROM_NO = #{leftPromNo}),
+		     RP AS (SELECT ILAW_ID, ILAW_NO FROM TB_PROM WHERE IPROM_NO = #{rightPromNo}),
+		     L_CUM AS (
+		       SELECT PV.SFULL_ITEM, PV.SCONTENTS
+		         FROM TB_PROV_VRSN PV, TB_PROM PR,
+		              ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		                  FROM TB_PROV_VRSN PV2, TB_PROM PR2, LP
+		                 WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		                   AND PR2.ILAW_ID  = LP.ILAW_ID
+		                   AND PR2.ILAW_NO <![CDATA[ <= ]]> LP.ILAW_NO
+		                 GROUP BY PV2.SFULL_ITEM ) M, LP
+		        WHERE PV.SFULL_ITEM = M.SFULL_ITEM
+		          AND PR.ILAW_NO    = M.ILAW_NO
+		          AND PR.ILAW_ID    = LP.ILAW_ID
+		          AND PV.IPROM_NO   = PR.IPROM_NO
+		          AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+		     ),
+		     R_CUM AS (
+		       SELECT PV.SFULL_ITEM, PV.SCONTENTS, PV.SGAEJUNG_TYPE, PV.SMOVE_FULL_ITEM
+		         FROM TB_PROV_VRSN PV, TB_PROM PR,
+		              ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		                  FROM TB_PROV_VRSN PV2, TB_PROM PR2, RP
+		                 WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		                   AND PR2.ILAW_ID  = RP.ILAW_ID
+		                   AND PR2.ILAW_NO <![CDATA[ <= ]]> RP.ILAW_NO
+		                 GROUP BY PV2.SFULL_ITEM ) M, RP
+		        WHERE PV.SFULL_ITEM = M.SFULL_ITEM
+		          AND PR.ILAW_NO    = M.ILAW_NO
+		          AND PR.ILAW_ID    = RP.ILAW_ID
+		          AND PV.IPROM_NO   = PR.IPROM_NO
+		          AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+		     )
+		<!-- MariaDB 는 FULL OUTER JOIN 미지원 → LEFT JOIN ∪ 우측 전용(안티조인) 으로 등가 분해 -->
+	SELECT D.FULL_ITEM, D.LEFT_TEXT, D.RIGHT_TEXT, D.GAEJUNG_TYPE, D.MOVE_FULL_ITEM, D.CHANGE_TYPE
+	  FROM (
+		SELECT
+			COALESCE(L.SFULL_ITEM, R.SFULL_ITEM) AS FULL_ITEM,
+			L.SCONTENTS                     AS LEFT_TEXT,
+			R.SCONTENTS                     AS RIGHT_TEXT,
+			R.SGAEJUNG_TYPE                 AS GAEJUNG_TYPE,
+			R.SMOVE_FULL_ITEM               AS MOVE_FULL_ITEM,
+			CASE
+				WHEN R.SFULL_ITEM IS NULL THEN 'REMOVED'
+				WHEN L.SCONTENTS IS NULL AND R.SCONTENTS IS NULL THEN 'UNCHANGED'
+				WHEN L.SCONTENTS IS NULL OR R.SCONTENTS IS NULL THEN 'MODIFIED'
+				WHEN L.SCONTENTS IS DISTINCT FROM R.SCONTENTS THEN 'MODIFIED'
+				ELSE 'UNCHANGED'
+			END                             AS CHANGE_TYPE
+		  FROM L_CUM L
+		  LEFT OUTER JOIN R_CUM R ON L.SFULL_ITEM = R.SFULL_ITEM
+		UNION ALL
+		SELECT R.SFULL_ITEM, NULL, R.SCONTENTS, R.SGAEJUNG_TYPE, R.SMOVE_FULL_ITEM, 'ADDED'
+		  FROM R_CUM R
+		  LEFT OUTER JOIN L_CUM L ON L.SFULL_ITEM = R.SFULL_ITEM
+		 WHERE L.SFULL_ITEM IS NULL
+	  ) D
+	 ORDER BY D.FULL_ITEM
+	</select>
+
+	<!--
+	  Oracle Text 전문 검색 — 누적/현행 효력 기준.
+	   - 각 회차는 변경/신규 행만 저장 → 단순 검색은 (lawId, SFULL_ITEM) 별로 중복 히트 발생.
+	   - 한 (lawId, SFULL_ITEM) 의 "현재 효력 있는" 행 = MAX(ILAW_NO) 의 행. 그 행에만 CONTAINS 매칭.
+	   - SSYS_ID 가 주어지면 해당 시스템으로 한정.
+	  CONTAINS(SCONTENTS, '키워드', 1) > 0  + SCORE(1) DESC.
+	  인덱스: IDX_PROV_VRSN_FT (rlms_prom_init.sql)
+	-->
+	<!-- 법령별 현행분류 집계 — 게이트 판정 기준(Prom_SQL lawCurCateAgg 의 alias PR 판, 2026-07-08 성능 재작성:
+	     행별 상관 스칼라+CONNECT BY → 무상관 집합 1회 계산. 등가성 실DB 검증) -->
+	<sql id="lawCurCateAggPR">( SELECT rk.ILAW_ID, rk.ICATE_NO CUR_CATE, rk.SGUBUN_ID CUR_GUBUN FROM ( SELECT pl.ILAW_ID, pl.ICATE_NO, pl.SGUBUN_ID, ROW_NUMBER() OVER (PARTITION BY pl.ILAW_ID ORDER BY pl.ILAW_NO DESC, pl.IPROM_NO DESC) RNK FROM TB_PROM pl ) rk WHERE rk.RNK = 1 )</sql>
+
+	<!-- 분류/구분별 열람제한 게이트 (TB_CATE_READER + TB_GUBUN_READER) — Prom_SQL cateReadGate 의 alias PR 판.
+	     규정 테이블 별칭 PR(TB_PROM) 전제. 면제역할은 자바에서 applyReadGate=false 로 미적용. 판정=법령 현행분류. -->
+	<sql id="cateReadGatePR">
+		<if test="applyReadGate">
+		AND ( PR.ILAW_ID NOT IN (
+				SELECT lcr.ILAW_ID FROM <include refid="lawCurCateAggPR"/> lcr
+				 WHERE lcr.CUR_CATE IN (
+				       SELECT rr.ICATE_NO FROM TB_CATE_READER rr
+				       UNION
+				       SELECT dt1.ICATE_NO FROM ( WITH RECURSIVE cr1 AS (
+				           SELECT ca.ICATE_NO FROM TB_CATE ca
+				            WHERE ca.ICATE_NO IN ( SELECT r.ICATE_NO FROM TB_CATE_READER r WHERE r.INHERIT_YN = 'Y' )
+				           UNION ALL
+				           SELECT ch.ICATE_NO FROM TB_CATE ch JOIN cr1 ON ch.IREF = cr1.ICATE_NO )
+				           SELECT ICATE_NO FROM cr1 ) dt1 )
+				    OR lcr.CUR_GUBUN IN ( SELECT gg.SGUBUN_ID FROM TB_GUBUN_READER gg ) )
+		   OR PR.ILAW_ID IN (
+				SELECT lca.ILAW_ID FROM <include refid="lawCurCateAggPR"/> lca
+				 WHERE lca.CUR_CATE IN (
+				       SELECT rm.ICATE_NO FROM TB_CATE_READER rm
+				        WHERE ( ( rm.READER_TY = 'USER' AND rm.READER_ID = #{readerEsntlId} )
+				             OR ( rm.READER_TY = 'DEPT' AND rm.READER_ID = #{readerOrgnztId} ) )
+				       UNION
+				       SELECT dt2.ICATE_NO FROM ( WITH RECURSIVE cr2 AS (
+				           SELECT cm.ICATE_NO FROM TB_CATE cm
+				            WHERE cm.ICATE_NO IN ( SELECT r2.ICATE_NO FROM TB_CATE_READER r2
+				                                    WHERE r2.INHERIT_YN = 'Y'
+				                                      AND ( ( r2.READER_TY = 'USER' AND r2.READER_ID = #{readerEsntlId} )
+				                                         OR ( r2.READER_TY = 'DEPT' AND r2.READER_ID = #{readerOrgnztId} ) ) )
+				           UNION ALL
+				           SELECT ch.ICATE_NO FROM TB_CATE ch JOIN cr2 ON ch.IREF = cr2.ICATE_NO )
+				           SELECT ICATE_NO FROM cr2 ) dt2 )
+				    OR lca.CUR_GUBUN IN (
+				       SELECT g2.SGUBUN_ID FROM TB_GUBUN_READER g2
+				        WHERE ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{readerEsntlId} )
+				             OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{readerOrgnztId} ) ) ) ) )
+		</if>
+	</sql>
+
+	<!-- 법령별 현행회차 집계 — draft(미승인 최신 회차) 상한 판정 기준(2026-07-10,
+	     UnifiedSearch_SQL curNoAgg 의 로컬 클론 — 크로스 네임스페이스 include 함정 회피).
+	     이 화면은 스니펫이 아니라 SCONTENTS 전체를 반환하므로 draft 누설 체감이 더 큼.
+	     ★적용 정책: 비면제(applyReadGate)만 — searchFullText 는 관리자/편집계 겸용 화면이라
+	     면제 3역할은 draft 조문도 계속 검색 가능해야 함(UnifiedSearch 조문축은 front 전용이라 무조건 적용).
+	     ★로직 변경 시 동시 수정: UnifiedSearch_SQL curNoAgg -->
+	<sql id="curNoAggPR">( SELECT c.ILAW_ID, MAX(c.ILAW_NO) CUR_NO FROM TB_PROM c WHERE c.SEXISTING_YN = 'Y' AND c.SDISP_YN = 'Y' GROUP BY c.ILAW_ID )</sql>
+
+	<select id="selectFullTextSearch" resultMap="provVrsnResult">
+		
+			SELECT PV.IPVRSN_NO, PV.IPROM_NO, PV.SFULL_ITEM, PV.SITEM, PV.SSUB_ITEM, PV.SMOVE_FULL_ITEM,
+			       PV.SUNIT_TYPE, PV.SNATIVE_TYPE, PV.SSTYLE_ID, PV.ILEVEL, PV.IINDEX,
+			       PV.STITLE, PV.SCONTENTS, PV.SREASON, PV.SSEARCH_TEXT,
+			       PV.SGAEJUNG_TYPE, PV.SGAEJUNG_HIDE_YN, PV.SUSER_MODIFIED_YN,
+			       PV.SDISP_YN, PV.SSTART_DT, PV.SINS_DT, PV.SSYS_ID,
+			       <!-- Oracle Text SCORE → 상수(INSTR 부분일치 설계). 정렬은 IPVRSN_NO 보조키로 페이징 안정화 -->
+			       1 AS RANK
+			  FROM TB_PROV_VRSN PV, TB_PROM PR<if test="applyReadGate">, <include refid="curNoAggPR"/> cn</if>
+			 WHERE PV.IPROM_NO = PR.IPROM_NO
+			   <![CDATA[ AND STRPOS(PV.SCONTENTS, #{keyword}) > 0 ]]>
+			   AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+			<!-- draft 상한(2026-07-10, ★비면제만): 미승인 draft 회차(현행 초과 ILAW_NO)의 조문 본문 노출 봉합.
+			     면제 3역할은 cn 조인 자체가 미전개 → draft 검색 기존대로 가능 -->
+			<if test="applyReadGate">
+			   AND cn.ILAW_ID = PR.ILAW_ID
+			   <![CDATA[ AND PR.ILAW_NO <= cn.CUR_NO ]]>
+			</if>
+			   AND PR.ILAW_NO = (
+			       SELECT MAX(PR2.ILAW_NO)
+			         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+			        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+			          AND PR2.ILAW_ID  = PR.ILAW_ID
+			          AND PV2.SFULL_ITEM = PV.SFULL_ITEM
+			          <!-- ★누적최신 MAX 서브쿼리에도 동일 상한 필수(없으면 draft 가 MAX 를 차지해 승인본 조문이 증발) -->
+			          <if test="applyReadGate"><![CDATA[ AND PR2.ILAW_NO <= cn.CUR_NO ]]></if>
+			   )
+			<include refid="cateReadGatePR"/>
+			 ORDER BY RANK DESC, PV.IPVRSN_NO
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<!-- ※ 본검색(selectFullTextSearch)과 조건 동일성 유지 필수(페이징 정합) — 게이트/상한 수정 시 양쪽 동시 -->
+	<select id="selectFullTextSearchCnt" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROV_VRSN PV, TB_PROM PR<if test="applyReadGate">, <include refid="curNoAggPR"/> cn</if>
+		 WHERE PV.IPROM_NO = PR.IPROM_NO
+		   <![CDATA[ AND STRPOS(PV.SCONTENTS, #{keyword}) > 0 ]]>
+		   AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+		<if test="applyReadGate">
+		   AND cn.ILAW_ID = PR.ILAW_ID
+		   <![CDATA[ AND PR.ILAW_NO <= cn.CUR_NO ]]>
+		</if>
+		   AND PR.ILAW_NO = (
+		       SELECT MAX(PR2.ILAW_NO)
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = PR.ILAW_ID
+		          AND PV2.SFULL_ITEM = PV.SFULL_ITEM
+		          <if test="applyReadGate"><![CDATA[ AND PR2.ILAW_NO <= cn.CUR_NO ]]></if>
+		   )
+		<include refid="cateReadGatePR"/>
+	</select>
+
+	<!-- ============================================================ -->
+	<!-- 뷰어 좌측 빠른검색 보조 — 전 규정 조문/별표 제목 검색 (2026-07-24) -->
+	<!--  · 대상 = 현행(SEXISTING_YN='Y'·표시) 회차 기준 누적 최신 행의 제목  -->
+	<!--  · 공백 제거 LIKE — "국제자본" 이 "국제 자본 …" 제목을 찾도록        -->
+	<!--  · 열람제한 게이트는 컨트롤러(quickSearchJson)가 canReadLaw 후필터   -->
+	<!-- ============================================================ -->
+	<!-- Oracle KEEP(DENSE_RANK LAST) → 윈도우 ROW_NUMBER. 최후행(ILAW_NO,IPROM_NO) 자신이 MAX(ILAW_NO) 행이라 CUR_NO=그 행의 ILAW_NO -->
+	<sql id="curLawAgg">( SELECT rk.ILAW_ID, rk.ILAW_NO CUR_NO, rk.IPROM_NO CUR_PROM, rk.STITLE CUR_TITLE
+	    FROM ( SELECT c.ILAW_ID, c.ILAW_NO, c.IPROM_NO, c.STITLE,
+	                  ROW_NUMBER() OVER (PARTITION BY c.ILAW_ID ORDER BY c.ILAW_NO DESC, c.IPROM_NO DESC) RNK
+	             FROM TB_PROM c
+	            WHERE c.SEXISTING_YN = 'Y' AND COALESCE(c.SDISP_YN, 'Y') = 'Y' ) rk
+	   WHERE rk.RNK = 1 )</sql>
+
+	<select id="selectQuickTitleSearch" resultType="java.util.LinkedHashMap">
+		
+			<!-- PG 는 무따옴표 별칭을 소문자로 폴딩 — 맵 키를 대문자로 읽는 소비층 보호로 첫 UNION 가지(라벨 정본)만 따옴표 고정 -->
+			SELECT 'JO' AS "SRC", cn.ILAW_ID AS "LAW_ID", cn.CUR_PROM AS "PROM_NO", cn.CUR_TITLE AS "LAW_TITLE",
+			       PV.SITEM AS "ITEM", PV.SSUB_ITEM AS "SUB_ITEM", PV.STITLE AS "TITLE", NULL AS "ANCHOR_NO"
+			  FROM TB_PROV_VRSN PV, TB_PROM PR, <include refid="curLawAgg"/> cn
+			 WHERE PV.IPROM_NO = PR.IPROM_NO
+			   AND PR.ILAW_ID  = cn.ILAW_ID
+			   <![CDATA[ AND PR.ILAW_NO <= cn.CUR_NO ]]>
+			   AND PV.SUNIT_TYPE = 'BASE_TEXT'
+			   AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+			   AND REPLACE(COALESCE(PV.STITLE, CHR(1)), ' ', '') LIKE '%' || REPLACE(#{q}, ' ', '') || '%'
+			   AND PR.ILAW_NO = ( SELECT MAX(PR2.ILAW_NO)
+			                        FROM TB_PROV_VRSN PV2, TB_PROM PR2
+			                       WHERE PV2.IPROM_NO = PR2.IPROM_NO
+			                         AND PR2.ILAW_ID  = PR.ILAW_ID
+			                         AND PV2.SFULL_ITEM = PV.SFULL_ITEM
+			                         <![CDATA[ AND PR2.ILAW_NO <= cn.CUR_NO ]]> )
+			UNION ALL
+			SELECT 'PHTML' AS SRC, cn.ILAW_ID, cn.CUR_PROM, cn.CUR_TITLE,
+			       PH.SITEM, NULL, PH.STITLE, PH.IPHTML_NO
+			  FROM TB_PROV_HTML PH, TB_PROM PR, <include refid="curLawAgg"/> cn
+			 WHERE PH.IPROM_NO = PR.IPROM_NO
+			   AND PR.ILAW_ID  = cn.ILAW_ID
+			   <![CDATA[ AND PR.ILAW_NO <= cn.CUR_NO ]]>
+			   AND COALESCE(PH.SDISP_YN, 'Y') = 'Y'
+			   AND COALESCE(PH.SGAEJUNG_TYPE, '-') != 'NULLIFY'
+			   AND REPLACE(COALESCE(PH.STITLE, CHR(1)), ' ', '') LIKE '%' || REPLACE(#{q}, ' ', '') || '%'
+			   AND PR.ILAW_NO = ( SELECT MAX(PR2.ILAW_NO)
+			                        FROM TB_PROV_HTML PH2, TB_PROM PR2
+			                       WHERE PH2.IPROM_NO = PR2.IPROM_NO
+			                         AND PR2.ILAW_ID  = PR.ILAW_ID
+			                         AND PH2.SITEM = PH.SITEM
+			                         <![CDATA[ AND PR2.ILAW_NO <= cn.CUR_NO ]]> )
+			UNION ALL
+			SELECT 'DOCU' AS SRC, cn.ILAW_ID, cn.CUR_PROM, cn.CUR_TITLE,
+			       NULL, NULL, D.STITLE, D.IDOCU_NO
+			  FROM TB_DOCU D, TB_PROM PR, <include refid="curLawAgg"/> cn
+			 WHERE D.IPROM_NO = PR.IPROM_NO
+			   AND PR.ILAW_ID = cn.ILAW_ID
+			   <![CDATA[ AND PR.ILAW_NO <= cn.CUR_NO ]]>
+			   AND COALESCE(D.SDISP_YN, 'Y') = 'Y'
+			   AND COALESCE(D.SGAEJUNG_TYPE, '-') != 'NULLIFY'
+			   AND REPLACE(COALESCE(D.STITLE, CHR(1)), ' ', '') LIKE '%' || REPLACE(#{q}, ' ', '') || '%'
+			   AND PR.ILAW_NO = ( SELECT MAX(PR2.ILAW_NO)
+			                        FROM TB_DOCU D2, TB_PROM PR2
+			                       WHERE D2.IPROM_NO = PR2.IPROM_NO
+			                         AND PR2.ILAW_ID = PR.ILAW_ID
+			                         AND D2.SITEM = D.SITEM
+			                         <![CDATA[ AND PR2.ILAW_NO <= cn.CUR_NO ]]> )
+			ORDER BY 2, 1, 5
+		LIMIT 80
+	</select>
+
+	<!-- ============================================================ -->
+	<!-- 유효성 검사 보조 SQL                                          -->
+	<!-- ============================================================ -->
+
+	<select id="countByPromNo" resultType="int">
+		SELECT COUNT(*) FROM TB_PROV_VRSN WHERE IPROM_NO = #{promNo}
+	</select>
+
+	<!-- 누적(승계 포함) 표시 조문 수 — selectAllCumulative 와 동일 기준(SFULL_ITEM 별 최신 + SDISP_YN='Y').
+	     소유 행 0건 회차의 "변경 없음(승계)" 판정용(유효성검사 규칙 2). -->
+	<select id="countCumulativeByLaw" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROV_VRSN PV, TB_PROM PR,
+		     ( SELECT MAX(PR2.ILAW_NO) AS ILAW_NO, PV2.SFULL_ITEM AS SFULL_ITEM
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = #{lawId}
+		          AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		        GROUP BY PV2.SFULL_ITEM ) M
+		 WHERE PV.SFULL_ITEM = M.SFULL_ITEM
+		   AND PR.ILAW_NO    = M.ILAW_NO
+		   AND PR.ILAW_ID    = #{lawId}
+		   AND PV.IPROM_NO   = PR.IPROM_NO
+		   AND COALESCE(PV.SDISP_YN, 'Y') = 'Y'
+	</select>
+
+	<!-- 중복 SFULL_ITEM — GROUP BY HAVING COUNT(*) > 1 -->
+	<select id="selectDuplicateFullItems" resultType="string">
+		SELECT SFULL_ITEM
+		  FROM TB_PROV_VRSN
+		 WHERE IPROM_NO = #{promNo}
+		 GROUP BY SFULL_ITEM
+		<![CDATA[ HAVING COUNT(*) > 1 ]]>
+		 ORDER BY SFULL_ITEM
+	</select>
+
+	<!-- 본문(SCONTENTS) 비어 있는 SFULL_ITEM -->
+	<select id="selectEmptyContentItems" resultType="string">
+		SELECT SFULL_ITEM
+		  FROM TB_PROV_VRSN
+		 WHERE IPROM_NO = #{promNo}
+		   AND (SCONTENTS IS NULL OR CHAR_LENGTH(SCONTENTS) = 0)
+		   <!-- 편·장·절·관·목 그룹 헤더는 본문이 없는 게 정상 — 경고 소음 제외(2026-07-16).
+		        빈 그룹(하위 조 없음)은 유효성검사 5-d 가 별도로 잡는다. -->
+		   AND COALESCE(SUNIT_TYPE, 'BASE_TEXT') != 'BASE_TEXT_GROUP'
+		 ORDER BY SFULL_ITEM
+	</select>
+
+</mapper>

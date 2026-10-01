@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/spring/com/idgn/context-idgn-LawQuest.xml
+  egovLawQuestIdGnrService : TB_LAWQUEST.NO ← COMTECOPSEQ.LAWQUEST_ID
+  (시드 = 기존 636행 MAX(NO)+1 = 2711, database/rlms_lawquest_init.sql)
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <bean name="egovLawQuestIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="lawQuestIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="LAWQUEST_ID"/>
+    </bean>
+    <bean name="lawQuestIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+</beans>

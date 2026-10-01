@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/spring/com/idgn/context-idgn-PromWork.xml
+
+  법령 승인 워크플로(TB_PROM_WRK, TB_PROM_ACT_LOG) PK 채번기.
+   - egovPromWorkIdGnrService   : TABLE_NAME='PROMWORK_ID'    (TB_PROM_WRK.IPWRK_NO)
+   - egovPromActLogIdGnrService : TABLE_NAME='PROMACTLOG_ID'  (TB_PROM_ACT_LOG.IPALOG_NO)
+
+  COMTECOPSEQ row 등록은 database/rlms_promwork_init.sql 참조.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <bean name="egovPromWorkIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="promWorkIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="PROMWORK_ID"/>
+    </bean>
+
+    <bean name="promWorkIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovPromActLogIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="promActLogIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="PROMACTLOG_ID"/>
+    </bean>
+
+    <bean name="promActLogIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+</beans>

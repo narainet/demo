@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="egovframework.com.cop.bbs.mapper.BoardMenuMapper">
+
+	<resultMap id="boardMenuMap" type="egovframework.com.cop.bbs.service.BoardMenuVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="menuNo" column="MENU_NO"/>
+		<result property="upperMenuNo" column="UPPER_MENU_NO"/>
+		<result property="menuNm" column="MENU_NM"/>
+		<result property="menuOrdr" column="MENU_ORDR"/>
+		<result property="progrmFileNm" column="PROGRM_FILE_NM"/>
+		<result property="url" column="URL"/>
+	</resultMap>
+
+	<select id="selectBoardMenuByUrl" parameterType="string" resultMap="boardMenuMap">
+		SELECT mi.MENU_NO, mi.UPPER_MENU_NO, mi.MENU_NM, mi.MENU_ORDR, mi.PROGRM_FILE_NM, pl.URL
+		  FROM COMTNMENUINFO mi
+		  JOIN COMTNPROGRMLIST pl ON pl.PROGRM_FILE_NM = mi.PROGRM_FILE_NM
+		 WHERE pl.URL = #{url}
+		 ORDER BY mi.MENU_NO
+	</select>
+
+	<select id="selectBoardMenuAuthorCodes" parameterType="string" resultType="string">
+		SELECT cd.AUTHOR_CODE
+		  FROM COMTNMENUCREATDTLS cd
+		  JOIN COMTNMENUINFO mi ON mi.MENU_NO = cd.MENU_NO
+		  JOIN COMTNPROGRMLIST pl ON pl.PROGRM_FILE_NM = mi.PROGRM_FILE_NM
+		 WHERE pl.URL = #{url}
+	</select>
+
+	<!-- 게시판 목록화면의 노출 상태 컬럼용. bbsId 는 URL 의 'bbsId=' 뒤 전체. -->
+	<select id="selectAllBoardMenus" parameterType="string" resultMap="boardMenuMap">
+		SELECT SUBSTR(pl.URL, STRPOS(pl.URL, 'bbsId=') + 6) AS BBS_ID,
+		       mi.MENU_NO, mi.UPPER_MENU_NO, mi.MENU_NM, mi.MENU_ORDR, mi.PROGRM_FILE_NM, pl.URL
+		  FROM COMTNMENUINFO mi
+		  JOIN COMTNPROGRMLIST pl ON pl.PROGRM_FILE_NM = mi.PROGRM_FILE_NM
+		 WHERE pl.URL LIKE #{urlPrefix} || '%'
+		   AND STRPOS(pl.URL, 'bbsId=') > 0
+	</select>
+
+	<select id="selectNextMenuNo" parameterType="long" resultType="long">
+		SELECT COALESCE(MAX(MENU_NO), #{upperMenuNo}) + 10000
+		  FROM COMTNMENUINFO
+		 WHERE UPPER_MENU_NO = #{upperMenuNo}
+	</select>
+
+	<select id="selectNextMenuOrdr" parameterType="long" resultType="int">
+		SELECT COALESCE(MAX(MENU_ORDR), 0) + 1
+		  FROM COMTNMENUINFO
+		 WHERE UPPER_MENU_NO = #{upperMenuNo}
+	</select>
+
+	<select id="countMenu" parameterType="long" resultType="int">
+		SELECT COUNT(*) FROM COMTNMENUINFO WHERE MENU_NO = #{menuNo}
+	</select>
+
+	<select id="countMenusByProgrm" parameterType="string" resultType="int">
+		SELECT COUNT(*) FROM COMTNMENUINFO WHERE PROGRM_FILE_NM = #{progrmFileNm}
+	</select>
+
+	<insert id="insertProgrm" parameterType="egovframework.com.cop.bbs.service.BoardMenuVO">
+		INSERT INTO COMTNPROGRMLIST (PROGRM_FILE_NM, PROGRM_STRE_PATH, PROGRM_KOREAN_NM, PROGRM_DC, URL)
+		VALUES (#{progrmFileNm}, '/cop/bbs/user/', #{menuNm}, '사용자 게시판 열람 (게시판속성관리에서 자동 생성)', #{url})
+	</insert>
+
+	<update id="updateProgrm" parameterType="egovframework.com.cop.bbs.service.BoardMenuVO">
+		UPDATE COMTNPROGRMLIST
+		   SET PROGRM_KOREAN_NM = #{menuNm},
+		       URL = #{url}
+		 WHERE PROGRM_FILE_NM = #{progrmFileNm}
+	</update>
+
+	<delete id="deleteProgrm" parameterType="string">
+		DELETE FROM COMTNPROGRMLIST WHERE PROGRM_FILE_NM = #{progrmFileNm}
+	</delete>
+
+	<insert id="insertMenu" parameterType="egovframework.com.cop.bbs.service.BoardMenuVO">
+		INSERT INTO COMTNMENUINFO (MENU_NO, UPPER_MENU_NO, MENU_NM, PROGRM_FILE_NM, MENU_ORDR, MENU_DC, MENU_SE)
+		VALUES (#{menuNo}, #{upperMenuNo}, #{menuNm}, #{progrmFileNm}, #{menuOrdr}, #{menuNm}, 'USER')
+	</insert>
+
+	<update id="updateMenu" parameterType="egovframework.com.cop.bbs.service.BoardMenuVO">
+		UPDATE COMTNMENUINFO
+		   SET MENU_NM = #{menuNm},
+		       MENU_ORDR = #{menuOrdr},
+		       MENU_DC = #{menuNm}
+		 WHERE MENU_NO = #{menuNo}
+	</update>
+
+	<delete id="deleteMenu" parameterType="long">
+		DELETE FROM COMTNMENUINFO WHERE MENU_NO = #{menuNo}
+	</delete>
+
+	<insert id="insertMenuAuthor">
+		INSERT INTO COMTNMENUCREATDTLS (MENU_NO, AUTHOR_CODE, MAPNG_CREAT_ID)
+		VALUES (#{menuNo}, #{authorCode}, NULL)
+	</insert>
+
+	<delete id="deleteMenuAuthors" parameterType="long">
+		DELETE FROM COMTNMENUCREATDTLS WHERE MENU_NO = #{menuNo}
+	</delete>
+
+</mapper>

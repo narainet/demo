@@ -1,0 +1,17 @@
+@charset "utf-8";
+/*
+ * com.css — DEPRECATED (RLMS 무력화)
+ *
+ * 원본은 글로벌 reset(* { ... }) + body/div/h1 등의 강제 12px '돋움'/회색 톤으로
+ * KRDS 헤더/본문 폰트 위계를 깨뜨림. RLMS 는 KRDS + rlms-compat.css 한 곳에서
+ * 모든 톤을 통일 관리하므로 com.css 의 전역 영향을 제거.
+ *
+ * 옛 클래스(.board / .search_box / .board_list / .wTable / .pagination /
+ * .btn_b / .btn_s / .s_btn / .pilsu 등) 는 모두 rlms-compat.css 에 KRDS 톤으로
+ * 매핑되어 있어 표준 JSP 219개는 link 만 유지해도 정상 표시.
+ *
+ * 위치: /src/main/webapp/css/egovframework/com/com.css
+ * 매핑: /src/main/webapp/resources/krds/css/rlms-compat.css 의 "eGov 표준 JSP 호환" 섹션
+ *
+ * 원본 복원 필요 시: git log -- css/egovframework/com/com.css 의 직전 커밋에서 checkout.
+ */

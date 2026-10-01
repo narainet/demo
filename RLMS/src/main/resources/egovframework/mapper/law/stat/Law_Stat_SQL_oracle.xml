@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/stat/Law_Stat_SQL_oracle.xml
+  소송통계 7종 — LAW_MODULE_DESIGN.md §7.12. 레거시 LawsuitStatDao.xml 대조로 집계 의미 확정.
+  · 구분 4축: 민사 S001 / 행정 S002 / 국가 S012 / 심판 S009 (서비스 상수, 임의 재분류 금지)
+  · 결과 그룹: 진행중 {S001} / 승소 {S002,S003,S005,S006,S008,S997} / 패소 {S004,S100,S101,S102,S998}
+  · 심급 3축: 1심 S001 / 2심 S002 / 3심 S004
+  · 레거시 BEFORE_FLAG(현행/보존 구분) 폐지 — 신규는 DEL_YN='N'만.
+  · 축 코드값은 전부 서비스 상수에서 파라미터로 주입(하드코딩 금지).
+-->
+<mapper namespace="narainet.law.stat.mapper.LawStatMapper">
+
+	<!-- ① 소송현황 (기간: 발생=FR_DT 소제기일, 종결=DCSN_DT 확정일 / 계류=RSLT 스냅샷)
+	     구분(CASE_KIND_CD)별 1행 — 서비스가 계/민사/행정/국가/심판 순으로 재배열 -->
+	<select id="selectSummary" parameterType="map" resultType="map">
+		SELECT CASE_KIND_CD AS "caseKindCd",
+		       SUM(CASE WHEN FR_DT IS NOT NULL AND FR_DT BETWEEN #{fromDate} AND #{toDate} THEN 1 ELSE 0 END) AS "occurrenceCnt",
+		       SUM(CASE WHEN DCSN_DT BETWEEN #{fromDate} AND #{toDate}
+		                 AND RSLT_KIND_CD IN
+		                 <foreach collection="winCds" item="w" open="(" close=")" separator=",">#{w}</foreach>
+		                THEN 1 ELSE 0 END) AS "winCnt",
+		       SUM(CASE WHEN DCSN_DT BETWEEN #{fromDate} AND #{toDate}
+		                 AND RSLT_KIND_CD IN
+		                 <foreach collection="loseCds" item="l" open="(" close=")" separator=",">#{l}</foreach>
+		                THEN 1 ELSE 0 END) AS "loseCnt",
+		       SUM(CASE WHEN RSLT_KIND_CD = #{processingCd} THEN 1 ELSE 0 END) AS "processingCnt"
+		  FROM LAW_SUIT
+		 WHERE DEL_YN = 'N'
+		   AND CASE_KIND_CD IN (#{minsaCd}, #{hangjungCd}, #{kukgaCd}, #{simpanCd})
+		 GROUP BY CASE_KIND_CD
+	</select>
+
+	<!-- ② 심급별통계 (계류 스냅샷 RSLT=진행중) — 심급(INSTANCE_CD)별 구분 카운트.
+	     단위=심급 행 COUNT(SUIT_ID). 서비스가 합계/1심/2심/3심 재배열.
+	     기간(fromDate/toDate, YYYYMMDD)=소제기일 FR_DT 옵션 필터 — 빈값이면 무기간 전체 (2026-07-27) -->
+	<select id="selectInstance" parameterType="map" resultType="map">
+		SELECT INSTANCE_CD AS "instanceCd",
+		       SUM(CASE WHEN CASE_KIND_CD = #{minsaCd}    THEN 1 ELSE 0 END) AS "minsaCnt",
+		       SUM(CASE WHEN CASE_KIND_CD = #{hangjungCd} THEN 1 ELSE 0 END) AS "hangjungCnt",
+		       SUM(CASE WHEN CASE_KIND_CD = #{kukgaCd}    THEN 1 ELSE 0 END) AS "kukgaCnt",
+		       SUM(CASE WHEN CASE_KIND_CD = #{simpanCd}   THEN 1 ELSE 0 END) AS "simpanCnt"
+		  FROM LAW_SUIT
+		 WHERE DEL_YN = 'N'
+		   AND RSLT_KIND_CD = #{processingCd}
+		   AND INSTANCE_CD IN (#{inst1}, #{inst2}, #{inst3})
+		<if test='fromDate != null and fromDate != ""'><![CDATA[ AND FR_DT >= #{fromDate} ]]></if>
+		<if test='toDate != null and toDate != ""'><![CDATA[ AND FR_DT <= #{toDate} ]]></if>
+		 GROUP BY INSTANCE_CD
+	</select>
+
+	<!-- ③ 유형별통계 (계류 스냅샷 RSLT=진행중) — 사건유형(LAW_CIVIL_CASE) 전 코드 LEFT JOIN.
+	     계(totCnt)=구분 무관 전건, 4개 구분열은 부분합.
+	     기간=소제기일 FR_DT 옵션 필터(JOIN 조건 — 전 코드 행 유지), 빈값=전체 (2026-07-27) -->
+	<select id="selectCaseType" parameterType="map" resultType="map">
+		SELECT c.CODE    AS "civilCaseCd",
+		       c.CODE_NM AS "name",
+		       COUNT(su.SUIT_ID) AS "totCnt",
+		       SUM(CASE WHEN su.CASE_KIND_CD = #{minsaCd}    THEN 1 ELSE 0 END) AS "minsaCnt",
+		       SUM(CASE WHEN su.CASE_KIND_CD = #{hangjungCd} THEN 1 ELSE 0 END) AS "hangjungCnt",
+		       SUM(CASE WHEN su.CASE_KIND_CD = #{kukgaCd}    THEN 1 ELSE 0 END) AS "kukgaCnt",
+		       SUM(CASE WHEN su.CASE_KIND_CD = #{simpanCd}   THEN 1 ELSE 0 END) AS "simpanCnt"
+		  FROM COMTCCMMNDETAILCODE c
+		  LEFT JOIN LAW_SUIT su
+		         ON su.CIVIL_CASE_CD = c.CODE
+		        AND su.DEL_YN = 'N'
+		        AND su.RSLT_KIND_CD = #{processingCd}
+		<if test='fromDate != null and fromDate != ""'><![CDATA[ AND su.FR_DT >= #{fromDate} ]]></if>
+		<if test='toDate != null and toDate != ""'><![CDATA[ AND su.FR_DT <= #{toDate} ]]></if>
+		 WHERE c.CODE_ID = 'LAW_CIVIL_CASE'
+		   AND c.USE_AT = 'Y'
+		 GROUP BY c.CODE, c.CODE_NM, c.CODE_DC
+		 ORDER BY c.CODE_DC, c.CODE
+	</select>
+
+	<!-- ④ 부서별통계 (계류 스냅샷 RSLT=진행중, 기간=소제기일 FR_DT 옵션·빈값=전체 2026-07-27) — 전 부서(COMTNORGNZTINFO) LEFT JOIN.
+	     부서 귀속=LAW_SUIT_STAFF.ORGNZT_ID, 변호사(L)=선임 존재 / 직접(G)=공무원 직접수행.
+	     사건 중복 방지 위해 파생표에서 DISTINCT(부서,사건,구분,선임유무) 후 집계 -->
+	<select id="selectDept" parameterType="map" resultType="map">
+		SELECT og.ORGNZT_ID AS "orgnztId",
+		       og.ORGNZT_NM AS "name",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{minsaCd}    AND t.hasLawyer = 'L' THEN 1 ELSE 0 END), 0) AS "minsaLawer",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{minsaCd}    AND t.hasLawyer = 'G' THEN 1 ELSE 0 END), 0) AS "minsaGong",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{hangjungCd} AND t.hasLawyer = 'L' THEN 1 ELSE 0 END), 0) AS "hangjungLawer",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{hangjungCd} AND t.hasLawyer = 'G' THEN 1 ELSE 0 END), 0) AS "hangjungGong",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{kukgaCd}    AND t.hasLawyer = 'L' THEN 1 ELSE 0 END), 0) AS "kukgaLawer",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{kukgaCd}    AND t.hasLawyer = 'G' THEN 1 ELSE 0 END), 0) AS "kukgaGong",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{simpanCd}   AND t.hasLawyer = 'L' THEN 1 ELSE 0 END), 0) AS "simpanLawer",
+		       NVL(SUM(CASE WHEN t.caseKindCd = #{simpanCd}   AND t.hasLawyer = 'G' THEN 1 ELSE 0 END), 0) AS "simpanGong"
+		  FROM COMTNORGNZTINFO og
+		  LEFT JOIN (
+		        SELECT DISTINCT s.ORGNZT_ID AS orgnztId,
+		               su.SUIT_ID          AS suitId,
+		               su.CASE_KIND_CD     AS caseKindCd,
+		               CASE WHEN EXISTS (SELECT 1 FROM LAW_SUIT_LAWYER l WHERE l.SUIT_ID = su.SUIT_ID)
+		                    THEN 'L' ELSE 'G' END AS hasLawyer
+		          FROM LAW_SUIT_STAFF s
+		          JOIN LAW_SUIT su ON s.SUIT_ID = su.SUIT_ID
+		         WHERE su.DEL_YN = 'N'
+		           AND su.RSLT_KIND_CD = #{processingCd}
+		           AND s.ORGNZT_ID IS NOT NULL
+		        <if test='fromDate != null and fromDate != ""'><![CDATA[ AND su.FR_DT >= #{fromDate} ]]></if>
+		        <if test='toDate != null and toDate != ""'><![CDATA[ AND su.FR_DT <= #{toDate} ]]></if>
+		       ) t ON t.orgnztId = og.ORGNZT_ID
+		 GROUP BY og.ORGNZT_ID, og.ORGNZT_NM
+		 ORDER BY og.ORGNZT_NM
+	</select>
+
+	<!-- ⑤-상단 대리인 지정현황 (계류 스냅샷 RSLT=진행중, 기간=소제기일 FR_DT 옵션·빈값=전체 2026-07-27) —
+	     변호사선임(L)/공무원수행(G)×구분. G = 수행자는 있으나 선임 없는 사건 -->
+	<select id="selectAgentTop" parameterType="map" resultType="map">
+		SELECT agentType AS "agentType",
+		       caseKindCd AS "caseKindCd",
+		       COUNT(*) AS "cnt"
+		  FROM (
+		        SELECT DISTINCT 'L' AS agentType, su.SUIT_ID AS suitId, su.CASE_KIND_CD AS caseKindCd
+		          FROM LAW_SUIT su
+		         WHERE su.DEL_YN = 'N'
+		           AND su.RSLT_KIND_CD = #{processingCd}
+		           AND EXISTS (SELECT 1 FROM LAW_SUIT_LAWYER l WHERE l.SUIT_ID = su.SUIT_ID)
+		        <if test='fromDate != null and fromDate != ""'><![CDATA[ AND su.FR_DT >= #{fromDate} ]]></if>
+		        <if test='toDate != null and toDate != ""'><![CDATA[ AND su.FR_DT <= #{toDate} ]]></if>
+		        UNION ALL
+		        SELECT DISTINCT 'G' AS agentType, su.SUIT_ID AS suitId, su.CASE_KIND_CD AS caseKindCd
+		          FROM LAW_SUIT su
+		         WHERE su.DEL_YN = 'N'
+		           AND su.RSLT_KIND_CD = #{processingCd}
+		           AND EXISTS (SELECT 1 FROM LAW_SUIT_STAFF s WHERE s.SUIT_ID = su.SUIT_ID)
+		           AND NOT EXISTS (SELECT 1 FROM LAW_SUIT_LAWYER l WHERE l.SUIT_ID = su.SUIT_ID)
+		        <if test='fromDate != null and fromDate != ""'><![CDATA[ AND su.FR_DT >= #{fromDate} ]]></if>
+		        <if test='toDate != null and toDate != ""'><![CDATA[ AND su.FR_DT <= #{toDate} ]]></if>
+		       ) t
+		 GROUP BY agentType, caseKindCd
+	</select>
+
+	<!-- ⑤-하단(변호사) 대리인별 통계 — 변호사(법무법인/성명)별 사건 집계.
+	     비용합계(totAmt)=소가(SUIT_AMT)+승패소금액(WIN_AMT+LOSE_AMT) 합(레거시 applyAmt+decsAmt) -->
+	<select id="selectAgentByLawyer" parameterType="map" resultType="map">
+		SELECT lw.LAW_FIRM  AS "companyName",
+		       lw.LAWYER_NM AS "name",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD = #{processingCd} THEN su.SUIT_ID END) AS "processingCnt",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD IS NOT NULL AND su.RSLT_KIND_CD != #{processingCd} THEN su.SUIT_ID END) AS "terminatedCnt",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD IN
+		             <foreach collection="winCds" item="w" open="(" close=")" separator=",">#{w}</foreach>
+		             THEN su.SUIT_ID END) AS "winCnt",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD IN
+		             <foreach collection="loseCds" item="l" open="(" close=")" separator=",">#{l}</foreach>
+		             THEN su.SUIT_ID END) AS "loseCnt",
+		       NVL(SUM(NVL(su.SUIT_AMT,0) + NVL(su.WIN_AMT,0) + NVL(su.LOSE_AMT,0)), 0) AS "totAmt"
+		  FROM LAW_SUIT_LAWYER a
+		  JOIN LAW_LAWYER lw ON a.LAWYER_ID = lw.LAWYER_ID
+		  JOIN LAW_SUIT   su ON a.SUIT_ID   = su.SUIT_ID
+		 WHERE su.DEL_YN = 'N'
+		<if test='fromDate != null and fromDate != ""'><![CDATA[ AND su.FR_DT >= #{fromDate} ]]></if>
+		<if test='toDate != null and toDate != ""'><![CDATA[ AND su.FR_DT <= #{toDate} ]]></if>
+		 GROUP BY lw.LAW_FIRM, lw.LAWYER_NM
+		 ORDER BY lw.LAW_FIRM, lw.LAWYER_NM
+	</select>
+
+	<!-- ⑤-하단(공무원) 대리인별 통계 — 수행 공무원(부서/성명)별 사건 집계 -->
+	<select id="selectAgentByOfficial" parameterType="map" resultType="map">
+		SELECT og.ORGNZT_NM AS "companyName",
+		       s.STAFF_NM   AS "name",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD = #{processingCd} THEN su.SUIT_ID END) AS "processingCnt",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD IS NOT NULL AND su.RSLT_KIND_CD != #{processingCd} THEN su.SUIT_ID END) AS "terminatedCnt",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD IN
+		             <foreach collection="winCds" item="w" open="(" close=")" separator=",">#{w}</foreach>
+		             THEN su.SUIT_ID END) AS "winCnt",
+		       COUNT(DISTINCT CASE WHEN su.RSLT_KIND_CD IN
+		             <foreach collection="loseCds" item="l" open="(" close=")" separator=",">#{l}</foreach>
+		             THEN su.SUIT_ID END) AS "loseCnt",
+		       NVL(SUM(NVL(su.SUIT_AMT,0) + NVL(su.WIN_AMT,0) + NVL(su.LOSE_AMT,0)), 0) AS "totAmt"
+		  FROM LAW_SUIT_STAFF s
+		  JOIN LAW_SUIT su ON s.SUIT_ID = su.SUIT_ID
+		  LEFT JOIN COMTNORGNZTINFO og ON s.ORGNZT_ID = og.ORGNZT_ID
+		 WHERE su.DEL_YN = 'N'
+		<if test='fromDate != null and fromDate != ""'><![CDATA[ AND su.FR_DT >= #{fromDate} ]]></if>
+		<if test='toDate != null and toDate != ""'><![CDATA[ AND su.FR_DT <= #{toDate} ]]></if>
+		 GROUP BY og.ORGNZT_NM, s.STAFF_NM
+		 ORDER BY og.ORGNZT_NM, s.STAFF_NM
+	</select>
+
+	<!-- ⑥ 패소원인 분석 (기간: 종결=DCSN_DT) — LAW_LOSS_CAUSE 전 코드 LEFT JOIN 건수 -->
+	<select id="selectLossCause" parameterType="map" resultType="map">
+		SELECT c.CODE    AS "code",
+		       c.CODE_NM AS "codeName",
+		       COUNT(su.SUIT_ID) AS "cnt"
+		  FROM COMTCCMMNDETAILCODE c
+		  LEFT JOIN LAW_SUIT su
+		         ON su.LOSS_CAUSE_CD = c.CODE
+		        AND su.DEL_YN = 'N'
+		        AND su.DCSN_DT BETWEEN #{fromDate} AND #{toDate}
+		 WHERE c.CODE_ID = 'LAW_LOSS_CAUSE'
+		   AND c.USE_AT = 'Y'
+		 GROUP BY c.CODE, c.CODE_NM, c.CODE_DC
+		 ORDER BY c.CODE_DC, c.CODE
+	</select>
+
+	<!-- ⑦ 사건지번표시도 (기간: FR_DT 우선, 없으면 DCSN_DT) — 지번 JSON 원천(Kakao Geocoder).
+	     결과 그룹 선택 시 RSLT_KIND_CD 필터 -->
+	<select id="selectLandJibun" parameterType="map" resultType="map">
+		SELECT su.SUIT_ID  AS "suitId",
+		       su.CASE_NO  AS "caseNo",
+		       su.CASE_NM  AS "caseNm",
+		       ld.LOCATION AS "location",
+		       ld.JIBUN    AS "jibun"
+		  FROM LAW_SUIT_LAND ld
+		  JOIN LAW_SUIT su ON ld.SUIT_ID = su.SUIT_ID
+		 WHERE su.DEL_YN = 'N'
+		   AND ( (su.FR_DT IS NOT NULL AND su.FR_DT BETWEEN #{fromDate} AND #{toDate})
+		      OR (su.FR_DT IS NULL AND su.DCSN_DT BETWEEN #{fromDate} AND #{toDate}) )
+		   <if test="rsltCds != null and rsltCds.size() > 0">
+		   AND su.RSLT_KIND_CD IN
+		   <foreach collection="rsltCds" item="r" open="(" close=")" separator=",">#{r}</foreach>
+		   </if>
+		   AND ( ld.LOCATION IS NOT NULL OR ld.JIBUN IS NOT NULL )
+		 ORDER BY su.SUIT_ID
+	</select>
+
+</mapper>

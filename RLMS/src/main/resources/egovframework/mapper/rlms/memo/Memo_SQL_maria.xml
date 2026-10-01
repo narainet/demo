@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/memo/Memo_SQL_maria.xml
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.memo.mapper.MemoMapper">
+
+	<resultMap id="memoResult" type="narainet.rlms.memo.service.MemoVO">
+		<result property="memoNo"   column="IMEMO_NO"/>
+		<result property="gubun"    column="SGUBUN"/>
+		<result property="lawId"    column="ILAW_ID"/>
+		<result property="item"     column="SITEM"/>
+		<result property="contents" column="SDESC"/>
+		<result property="userId"   column="SUSER_ID"/>
+		<result property="userName" column="SUSER_NAME"/>
+		<result property="buseoId"  column="SBUSEO_ID"/>
+		<result property="insDt"    column="SINS_DT"/>
+		<result property="sysId"    column="SSYS_ID"/>
+	</resultMap>
+
+	<select id="selectMyMemoList" resultMap="memoResult">
+		
+			<!-- 등록일시는 화면에 분까지만 — 원본(초까지)은 정렬용으로 그대로 둔다 (2026-07-31) -->
+			SELECT IMEMO_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME,
+			       SBUSEO_ID, SUBSTR(SINS_DT, 1, 16) AS SINS_DT, SSYS_ID
+			  FROM TB_MEMO
+			 WHERE SUSER_ID = #{userId}
+			<if test="vo.searchGubun != null and vo.searchGubun != ''">
+			   AND SGUBUN = #{vo.searchGubun}
+			</if>
+			<if test="vo.searchKeyword != null and vo.searchKeyword != ''">
+			   AND (UPPER(SDESC) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+			    OR  UPPER(SITEM) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%')
+			</if>
+			 ORDER BY IMEMO_NO DESC
+		LIMIT #{vo.recordCountPerPage} OFFSET #{vo.firstIndex}
+	</select>
+
+	<select id="selectMyMemoListCnt" resultType="int">
+		SELECT COUNT(*) FROM TB_MEMO
+		 WHERE SUSER_ID = #{userId}
+		<if test="vo.searchGubun != null and vo.searchGubun != ''">
+		   AND SGUBUN = #{vo.searchGubun}
+		</if>
+		<if test="vo.searchKeyword != null and vo.searchKeyword != ''">
+		   AND (UPPER(SDESC) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+		    OR  UPPER(SITEM) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%')
+		</if>
+	</select>
+
+	<select id="selectMemoByNo" resultMap="memoResult">
+		SELECT IMEMO_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME,
+		       SBUSEO_ID, SINS_DT, SSYS_ID
+		  FROM TB_MEMO WHERE IMEMO_NO = #{memoNo}
+	</select>
+
+	<select id="selectMemoListByLaw" resultMap="memoResult">
+		SELECT IMEMO_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME,
+		       SBUSEO_ID, SINS_DT, SSYS_ID
+		  FROM TB_MEMO
+		 WHERE SUSER_ID = #{userId}
+		   AND ILAW_ID  = #{lawId}
+		 ORDER BY SITEM, IMEMO_NO DESC
+	</select>
+
+	<select id="selectMemoListByItem" resultMap="memoResult">
+		SELECT IMEMO_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME,
+		       SBUSEO_ID, SINS_DT, SSYS_ID
+		  FROM TB_MEMO
+		 WHERE SUSER_ID = #{userId}
+		   AND ILAW_ID  = #{lawId}
+		   AND SITEM    = #{item}
+		 ORDER BY IMEMO_NO DESC
+	</select>
+
+	<insert id="insertMemo" parameterType="narainet.rlms.memo.service.MemoVO">
+		INSERT INTO TB_MEMO (
+			IMEMO_NO, SGUBUN, ILAW_ID, SITEM, SDESC, SUSER_ID, SUSER_NAME,
+			SBUSEO_ID, SINS_DT
+		) VALUES (
+			#{memoNo}, #{gubun}, #{lawId}, #{item}, #{contents},
+			#{userId}, #{userName}, #{buseoId},
+			TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS')
+		)
+	</insert>
+
+	<update id="updateMemo" parameterType="narainet.rlms.memo.service.MemoVO">
+		UPDATE TB_MEMO SET
+			SGUBUN = #{gubun},
+			SITEM  = #{item},
+			SDESC  = #{contents}
+		WHERE IMEMO_NO = #{memoNo}
+	</update>
+
+	<delete id="deleteMemo">
+		DELETE FROM TB_MEMO WHERE IMEMO_NO = #{memoNo}
+	</delete>
+
+</mapper>

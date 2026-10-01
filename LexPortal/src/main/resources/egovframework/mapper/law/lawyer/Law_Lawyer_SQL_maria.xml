@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/lawyer/Law_Lawyer_SQL_maria.xml
+  변호사 명부 (LAW_LAWYER) — 목록은 만족도·선임 집계 동봉 집합 1회 (§7.7).
+-->
+<mapper namespace="narainet.law.lawyer.mapper.LawLawyerMapper">
+
+	<sql id="searchWhere">
+		WHERE L.DEL_YN = 'N'
+		<if test='searchKeyword != null and searchKeyword != ""'>
+		  AND (L.LAW_FIRM LIKE '%' || #{searchKeyword} || '%' OR L.LAWYER_NM LIKE '%' || #{searchKeyword} || '%')
+		</if>
+	</sql>
+
+	<select id="selectLawyerCnt" parameterType="narainet.law.lawyer.service.LawLawyerVO" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_LAWYER L
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectLawyerList" parameterType="narainet.law.lawyer.service.LawLawyerVO"
+	        resultType="narainet.law.lawyer.service.LawLawyerVO">
+		SELECT L.LAWYER_ID   AS lawyerId,
+		                       L.LAW_FIRM    AS lawFirm,
+		                       L.LAWYER_NM   AS lawyerNm,
+		                       L.EMAIL       AS email,
+		                       L.TEL         AS tel,
+		                       L.MOBILE      AS mobile,
+		                       SUBSTR(L.REG_DT, 1, 8) AS regDt,
+		                       NVL(AG.CNT, 0)         AS assignCnt,
+		                       ST.AVG_SCORE           AS satisAvg,
+		                       NVL(ST.CNT, 0)         AS satisCnt
+		                  FROM LAW_LAWYER L
+		                  LEFT OUTER JOIN (
+		                        SELECT SL.LAWYER_ID, COUNT(*) CNT
+		                          FROM LAW_SUIT_LAWYER SL
+		                         GROUP BY SL.LAWYER_ID
+		                       ) AG ON AG.LAWYER_ID = L.LAWYER_ID
+		                  LEFT OUTER JOIN (
+		                        SELECT SL.LAWYER_ID, ROUND(AVG(SA.SCORE), 1) AVG_SCORE, COUNT(*) CNT
+		                          FROM LAW_LAWYER_SATIS SA
+		                          JOIN LAW_SUIT_LAWYER SL ON SL.ASSIGN_ID = SA.ASSIGN_ID
+		                         GROUP BY SL.LAWYER_ID
+		                       ) ST ON ST.LAWYER_ID = L.LAWYER_ID
+		                <include refid="searchWhere"/>
+		                 ORDER BY L.LAWYER_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="selectLawyer" resultType="narainet.law.lawyer.service.LawLawyerVO">
+		SELECT LAWYER_ID  AS lawyerId,
+		       LAW_FIRM   AS lawFirm,
+		       LAWYER_NM  AS lawyerNm,
+		       EMAIL      AS email,
+		       TEL        AS tel,
+		       MOBILE     AS mobile,
+		       DEL_YN     AS delYn
+		  FROM LAW_LAWYER
+		 WHERE LAWYER_ID = #{lawyerId}
+	</select>
+
+	<insert id="insertLawyer" parameterType="narainet.law.lawyer.service.LawLawyerVO">
+		INSERT INTO LAW_LAWYER (
+			LAWYER_ID, LAW_FIRM, LAWYER_NM, EMAIL, TEL, MOBILE,
+			DEL_YN, REG_USER_ID, REG_DT
+		) VALUES (
+			#{lawyerId}, #{lawFirm}, #{lawyerNm}, #{email, jdbcType=VARCHAR}, #{tel, jdbcType=VARCHAR}, #{mobile, jdbcType=VARCHAR},
+			'N', #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateLawyer" parameterType="narainet.law.lawyer.service.LawLawyerVO">
+		UPDATE LAW_LAWYER
+		   SET LAW_FIRM    = #{lawFirm},
+		       LAWYER_NM   = #{lawyerNm},
+		       EMAIL       = #{email, jdbcType=VARCHAR},
+		       TEL         = #{tel, jdbcType=VARCHAR},
+		       MOBILE      = #{mobile, jdbcType=VARCHAR},
+		       UPD_USER_ID = #{updUserId},
+		       UPD_DT      = #{updDt}
+		 WHERE LAWYER_ID = #{lawyerId}
+	</update>
+
+	<update id="deleteLawyer" parameterType="narainet.law.lawyer.service.LawLawyerVO">
+		UPDATE LAW_LAWYER
+		   SET DEL_YN      = 'Y',
+		       UPD_USER_ID = #{updUserId},
+		       UPD_DT      = #{updDt}
+		 WHERE LAWYER_ID = #{lawyerId}
+	</update>
+
+	<select id="countAssignRef" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT_LAWYER
+		 WHERE LAWYER_ID = #{lawyerId}
+	</select>
+
+</mapper>

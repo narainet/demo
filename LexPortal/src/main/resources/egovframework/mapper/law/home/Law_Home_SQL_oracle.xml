@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/home/Law_Home_SQL_oracle.xml
+  송무 홈 대시보드 요약 카드 집계 (LAW_MODULE_DESIGN.md §7.0)
+-->
+<mapper namespace="narainet.law.home.mapper.LawHomeMapper">
+
+	<select id="countActiveSuits" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT
+		 WHERE DEL_YN = 'N'
+		   AND (RSLT_KIND_CD IS NULL OR RSLT_KIND_CD = 'S001')
+	</select>
+
+	<select id="countNewSuitsThisMonth" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT
+		 WHERE DEL_YN = 'N'
+		   AND SUBSTR(REG_DT, 1, 6) = TO_CHAR(SYSDATE, 'YYYYMM')
+	</select>
+
+	<select id="countPendingReqs" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT_REQ
+		 WHERE STATUS_CD = 'S001'
+	</select>
+
+	<select id="countPendingDocs" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT_DOC
+		 WHERE APP_STS_CD = 'S001'
+	</select>
+
+	<select id="selectRecentSuits" resultType="map">
+		SELECT * FROM (
+			SELECT S.SUIT_ID   AS "suitId",
+			       S.CASE_NO   AS "caseNo",
+			       S.CASE_NM   AS "caseNm",
+			       S.COURT_NM  AS "courtNm",
+			       IC.CODE_NM  AS "instanceNm",
+			       SUBSTR(S.REG_DT, 1, 8) AS "regDt",
+			       NVL(S.RSLT_KIND_NM, RS.CODE_NM) AS "rsltDispNm"
+			  FROM LAW_SUIT S
+			  LEFT OUTER JOIN COMTCCMMNDETAILCODE IC ON IC.CODE_ID = 'LAW_INSTANCE' AND IC.CODE = S.INSTANCE_CD
+			  LEFT OUTER JOIN COMTCCMMNDETAILCODE RS ON RS.CODE_ID = 'LAW_RESULT'   AND RS.CODE = S.RSLT_KIND_CD
+			 WHERE S.DEL_YN = 'N'
+			 ORDER BY S.SUIT_ID DESC
+		) WHERE ROWNUM <![CDATA[<=]]> 5
+	</select>
+
+</mapper>

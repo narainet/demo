@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/attach/Attach_SQL_maria.xml
+
+  도메인 첨부(TB_ATTACH) MyBatis 매핑.
+   - polymorphic: (SREF_TABLE, IREF_NO) 로 도메인 row 참조.
+   - 일부 DELETE 는 도메인 트리거(TRG_DEL_PROV_HTML 등) 에서 cascade 처리됨.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.attach.mapper.AttachMapper">
+
+	<resultMap id="attachResult" type="narainet.rlms.attach.service.AttachVO">
+		<result property="attNo"    column="IATT_NO"/>
+		<result property="cateId"   column="SCATE_ID"/>
+		<result property="refTable" column="SREF_TABLE"/>
+		<result property="refNo"    column="IREF_NO"/>
+		<result property="path"     column="SPATH"/>
+		<result property="name"     column="SNAME"/>
+		<result property="mapping"  column="SMAPPING"/>
+		<result property="ext"      column="SEXT"/>
+		<result property="meta"     column="SMETA"/>
+		<result property="title"    column="STITLE"/>
+		<result property="contents" column="SCONTENTS" jdbcType="CLOB"/>
+		<result property="seq"      column="ISEQ"/>
+		<result property="insDt"    column="SINS_DT"/>
+		<result property="size"     column="ISIZE"/>
+		<result property="sysId"    column="SSYS_ID"/>
+		<result property="downCnt"  column="IDOWN_CNT"/>
+	</resultMap>
+
+	<select id="selectAttachByRef" resultMap="attachResult">
+		SELECT IATT_NO, SCATE_ID, SREF_TABLE, IREF_NO, SPATH, SNAME, SMAPPING, SEXT,
+		       SMETA, STITLE, SCONTENTS, ISEQ, SINS_DT, ISIZE, SSYS_ID, IDOWN_CNT
+		  FROM TB_ATTACH
+		 WHERE SREF_TABLE = #{refTable}
+		   AND IREF_NO    = #{refNo}
+		 ORDER BY ISEQ, IATT_NO
+	</select>
+
+	<select id="selectAttachByNo" resultMap="attachResult">
+		SELECT IATT_NO, SCATE_ID, SREF_TABLE, IREF_NO, SPATH, SNAME, SMAPPING, SEXT,
+		       SMETA, STITLE, SCONTENTS, ISEQ, SINS_DT, ISIZE, SSYS_ID, IDOWN_CNT
+		  FROM TB_ATTACH
+		 WHERE IATT_NO = #{attNo}
+	</select>
+
+	<!-- 첨부의 소유 규정 번호 해석 (분류별 열람제한 가드용).
+	     관련자료 자식 4종은 IRVRSN_NO 로 TB_REL_VRSN.IPROM_NO 를, TB_PROM_WRK 는 자기 IPROM_NO 를 따라감.
+	     ★연결이 양방향으로 존재(실DB 확인): 레거시(레거시 이관) 행은 IREF_NO=0 이고 자식테이블의
+	       IATT_NO 가 첨부를 가리킴 / RLMS 신규 행은 TB_ATTACH.IREF_NO 가 자식 PK 를 가리킴 → 둘 다 탐색.
+	     규정과 무관한 refTable(TB_NOTICE, TB_LAWQUEST 등)은 결과 없음 → NULL 반환(게이트 미적용). -->
+	<select id="selectOwnerPromNoByAttach" resultType="java.lang.Long">
+		SELECT MAX(OWNER_PROM_NO) FROM (
+			SELECT v.IPROM_NO AS OWNER_PROM_NO
+			  FROM TB_REL_FILE t, TB_REL_VRSN v
+			 WHERE t.IATT_NO = #{attNo} AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_REL_WORD t, TB_REL_VRSN v
+			 WHERE t.IATT_NO = #{attNo} AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_REL_ORGN t, TB_REL_VRSN v
+			 WHERE t.IATT_NO = #{attNo} AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_REL_IMG t, TB_REL_VRSN v
+			 WHERE t.IATT_NO = #{attNo} AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_ATTACH a, TB_REL_FILE t, TB_REL_VRSN v
+			 WHERE a.IATT_NO = #{attNo} AND a.SREF_TABLE = 'TB_REL_FILE'
+			   AND t.IRFILE_NO = a.IREF_NO AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_ATTACH a, TB_REL_WORD t, TB_REL_VRSN v
+			 WHERE a.IATT_NO = #{attNo} AND a.SREF_TABLE = 'TB_REL_WORD'
+			   AND t.IRWORD_NO = a.IREF_NO AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_ATTACH a, TB_REL_ORGN t, TB_REL_VRSN v
+			 WHERE a.IATT_NO = #{attNo} AND a.SREF_TABLE = 'TB_REL_ORGN'
+			   AND t.IRORGN_NO = a.IREF_NO AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT v.IPROM_NO
+			  FROM TB_ATTACH a, TB_REL_IMG t, TB_REL_VRSN v
+			 WHERE a.IATT_NO = #{attNo} AND a.SREF_TABLE = 'TB_REL_IMG'
+			   AND t.IRIMG_NO = a.IREF_NO AND v.IRVRSN_NO = t.IRVRSN_NO
+			UNION ALL
+			SELECT w.IPROM_NO
+			  FROM TB_ATTACH a, TB_PROM_WRK w
+			 WHERE a.IATT_NO = #{attNo} AND a.SREF_TABLE = 'TB_PROM_WRK'
+			   AND w.IPWRK_NO = a.IREF_NO
+		) X
+	</select>
+
+	<insert id="insertAttach" parameterType="narainet.rlms.attach.service.AttachVO">
+		INSERT INTO TB_ATTACH (
+			IATT_NO, SCATE_ID, SREF_TABLE, IREF_NO, SPATH, SNAME, SMAPPING, SEXT,
+			SMETA, STITLE, SCONTENTS, ISEQ, SINS_DT, ISIZE
+		) VALUES (
+			#{attNo}, #{cateId}, #{refTable}, #{refNo}, #{path}, #{name}, #{mapping}, #{ext},
+			#{meta}, #{title}, #{contents,jdbcType=CLOB}, #{seq},
+			TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS'),
+			#{size}
+		)
+	</insert>
+
+
+	<delete id="deleteAttachByRef">
+		DELETE FROM TB_ATTACH WHERE SREF_TABLE = #{refTable} AND IREF_NO = #{refNo}
+	</delete>
+
+	<delete id="deleteAttachByNo">
+		DELETE FROM TB_ATTACH WHERE IATT_NO = #{attNo}
+	</delete>
+
+	<!--
+	  다운로드 횟수 +1 (2026-07-30). 표준 첨부의 COMTNFILEDETAIL.DWLD_CO 와 같은 역할.
+	  상세 이력(누가/언제/IP)은 TB_ACT_LOG(STASK='파일 다운로드')가 이미 남기므로 여기는 목록 표시용 집계만.
+	  카운트 실패가 다운로드를 막지 않도록 호출부는 예외를 삼킨다.
+	-->
+	<update id="increaseDownloadCount">
+		UPDATE TB_ATTACH SET IDOWN_CNT = NVL(IDOWN_CNT, 0) + 1 WHERE IATT_NO = #{attNo}
+	</update>
+
+</mapper>

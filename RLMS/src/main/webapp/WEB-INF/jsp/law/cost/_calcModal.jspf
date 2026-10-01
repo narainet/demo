@@ -1,0 +1,226 @@
+<%--
+  물리적 저장 경로: /src/main/webapp/WEB-INF/jsp/law/cost/_calcModal.jspf
+  소송비용 계산기 공용 모달 프래그먼트 (LAW_MODULE_DESIGN.md §7.4).
+  인지액·송달료·변호사비·지연이자 4계산기. 요율은 하드코딩 없이 /law/cost/calcRateJson.do(기준일 유효 세트)에서 로드,
+  공식 뼈대는 레거시 Calc_Stamp/Calc_Send/Calc_Lawyer 1:1 이식. 지연이자는 서버(/law/cost/calcInterestJson.do) 일할 계산.
+  host 페이지에서 taglib c 선언 + [계산기] 버튼 onclick="fnOpenCalc()" 로 사용. window.open 미사용(모달).
+  ★static include(.jspf)는 부모 pageEncoding 이 전파되지 않는다 — 파일 자체에 pageEncoding 명시 필수(없으면 기본 ISO-8859-1 로 읽혀 한글 깨짐).
+--%>
+<%@ page pageEncoding="UTF-8" %>
+<div class="law-modal-back" id="calc_back" onclick="fnCloseCalc();"></div>
+<div class="law-modal" id="calc_modal" role="dialog" aria-modal="true" aria-labelledby="calc_title"
+     style="width:600px; max-width:calc(96vw / var(--rlms-zoom, 1)); max-height:calc(90vh / var(--rlms-zoom, 1)); overflow-y:auto;">
+  <h2 id="calc_title" style="margin:0 0 8px;">소송비용 계산기</h2>
+  <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+    <label for="calc_baseDt" style="font-size:13px; color:#444;">기준일</label>
+    <input type="date" id="calc_baseDt" class="krds-input" style="width:170px;" onchange="fnCalcLoadRates();"/>
+    <span id="calc_rateInfo" class="law-cell-sub"></span>
+  </div>
+  <div class="calc-tabs" style="display:flex; gap:4px; border-bottom:2px solid #256ef4; margin-bottom:14px;">
+    <button type="button" class="calc-tab on" data-t="stamp" onclick="fnCalcTab('stamp');">인지액</button>
+    <button type="button" class="calc-tab" data-t="send" onclick="fnCalcTab('send');">송달료</button>
+    <button type="button" class="calc-tab" data-t="lawyer" onclick="fnCalcTab('lawyer');">변호사비</button>
+    <button type="button" class="calc-tab" data-t="interest" onclick="fnCalcTab('interest');">지연이자</button>
+  </div>
+
+  <%-- 인지액 --%>
+  <div class="calc-pane" data-p="stamp">
+    <div class="calc-row"><label>사건종류</label><select id="cs_kind" class="krds-input"></select></div>
+    <div class="calc-row"><label>소송가액(원)</label><input type="text" id="cs_amt" class="krds-input calc-num" inputmode="numeric"/></div>
+    <div class="calc-actions"><button type="button" class="krds-btn primary medium" onclick="fnCalcStamp();">계산</button></div>
+    <div class="calc-out">인지액 <b id="cs_out">0</b> 원</div>
+  </div>
+
+  <%-- 송달료 --%>
+  <div class="calc-pane" data-p="send" style="display:none;">
+    <div class="calc-row"><label>사건유형</label><select id="cd_kind" class="krds-input"></select></div>
+    <div class="calc-row"><label>당사자수(명)</label><input type="text" id="cd_parties" class="krds-input calc-num" inputmode="numeric" value="2"/></div>
+    <div class="calc-row"><label>1회 우편료(원)</label><input type="text" id="cd_unit" class="krds-input calc-num" inputmode="numeric"/></div>
+    <div class="calc-actions"><button type="button" class="krds-btn primary medium" onclick="fnCalcSend();">계산</button></div>
+    <div class="calc-out">송달료 <b id="cd_out">0</b> 원 <span class="law-cell-sub" id="cd_detail"></span></div>
+  </div>
+
+  <%-- 변호사비 --%>
+  <div class="calc-pane" data-p="lawyer" style="display:none;">
+    <div class="calc-row"><label>소송가액(원)</label><input type="text" id="cl_amt" class="krds-input calc-num" inputmode="numeric"/></div>
+    <div class="calc-actions"><button type="button" class="krds-btn primary medium" onclick="fnCalcLawyer();">계산</button></div>
+    <div class="calc-out">변호사비(산입 상한) <b id="cl_out">0</b> 원</div>
+    <p class="law-cell-sub">변호사보수의 소송비용 산입에 관한 규칙 별표 기준. 기준일에 따라 적용 요율표가 달라집니다.</p>
+  </div>
+
+  <%-- 지연이자 --%>
+  <div class="calc-pane" data-p="interest" style="display:none;">
+    <div class="calc-row"><label>원금(원)</label><input type="text" id="ci_amt" class="krds-input calc-num" inputmode="numeric"/></div>
+    <fieldset style="border:1px solid #e3e3e3; border-radius:6px; padding:10px 12px; margin-bottom:10px;">
+      <legend style="font-size:13px; padding:0 6px;">1차 기간</legend>
+      <div class="calc-row"><label>시작~종료</label>
+        <span style="display:flex; gap:6px;"><input type="date" id="ci_d1f" class="krds-input"/><input type="date" id="ci_d1t" class="krds-input"/></span></div>
+      <div class="calc-row"><label>이율(연 %)</label>
+        <span style="display:flex; gap:6px; align-items:center;">
+          <input type="text" id="ci_r1" class="krds-input calc-num" style="width:90px;" inputmode="numeric"/>
+          <span id="ci_presets1" class="calc-presets"></span>
+        </span></div>
+    </fieldset>
+    <fieldset style="border:1px solid #e3e3e3; border-radius:6px; padding:10px 12px; margin-bottom:10px;">
+      <legend style="font-size:13px; padding:0 6px;">2차 기간(선택)</legend>
+      <div class="calc-row"><label>시작~종료</label>
+        <span style="display:flex; gap:6px;"><input type="date" id="ci_d2f" class="krds-input"/><input type="date" id="ci_d2t" class="krds-input"/></span></div>
+      <div class="calc-row"><label>이율(연 %)</label>
+        <span style="display:flex; gap:6px; align-items:center;">
+          <input type="text" id="ci_r2" class="krds-input calc-num" style="width:90px;" inputmode="numeric"/>
+          <span id="ci_presets2" class="calc-presets"></span>
+        </span></div>
+    </fieldset>
+    <div class="calc-actions"><button type="button" class="krds-btn primary medium" onclick="fnCalcInterest();">계산</button></div>
+    <div class="calc-out">지연이자 <b id="ci_out">0</b> 원 · 원리금 합계 <b id="ci_sum">0</b> 원</div>
+  </div>
+
+  <div style="margin-top:18px; text-align:right;">
+    <button type="button" class="krds-btn medium" onclick="fnCloseCalc();">닫기</button>
+  </div>
+</div>
+
+<style>
+  .calc-tab { padding:8px 16px; border:none; background:transparent; color:#555; font-size:14px; cursor:pointer; border-radius:6px 6px 0 0; }
+  .calc-tab.on { background:#256ef4; color:#fff; font-weight:600; }
+  .calc-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .calc-row > label { width:110px; font-size:13px; color:#444; flex:none; }
+  .calc-row .krds-input { flex:1; }
+  .calc-num { text-align:right; }
+  .calc-actions { text-align:center; margin:12px 0; }
+  .calc-out { background:#f4f7ff; border:1px solid #cdd9f5; border-radius:8px; padding:12px 14px; font-size:15px; text-align:center; }
+  .calc-out b { font-size:19px; color:#194fc0; }
+  .calc-presets .krds-btn { margin-right:4px; }
+</style>
+
+<script>
+var CALC = { rates: {}, unit: 0 };
+function fnCalcComma(n){ return (n==null?0:n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fnCalcNum(id){ var v = document.getElementById(id).value || ''; v = v.replace(/[^0-9.]/g,''); return v==='' ? 0 : parseFloat(v); }
+function fnCalcInt(id){ var v = document.getElementById(id).value || ''; v = v.replace(/[^0-9]/g,''); return v==='' ? 0 : parseInt(v,10); }
+
+document.addEventListener('input', function(e){
+  if(e.target.classList && e.target.classList.contains('calc-num') && !e.target.id.startsWith('ci_r')){
+    var raw = e.target.value.replace(/[^0-9]/g,'');
+    e.target.value = raw ? fnCalcComma(parseInt(raw,10)) : '';
+  }
+});
+
+function fnOpenCalc(){
+  var d = new Date();
+  var iso = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+  document.getElementById('calc_baseDt').value = iso;
+  document.getElementById('calc_back').style.display = 'block';
+  document.getElementById('calc_modal').style.display = 'block';
+  fnCalcTab('stamp');
+  fnCalcLoadRates();
+}
+function fnCloseCalc(){ document.getElementById('calc_back').style.display='none'; document.getElementById('calc_modal').style.display='none'; }
+function fnCalcTab(t){
+  Array.prototype.forEach.call(document.querySelectorAll('.calc-tab'), function(b){ b.classList.toggle('on', b.dataset.t===t); });
+  Array.prototype.forEach.call(document.querySelectorAll('.calc-pane'), function(p){ p.style.display = (p.dataset.p===t)?'block':'none'; });
+}
+
+function fnCalcLoadRates(){
+  var baseDt = (document.getElementById('calc_baseDt').value||'').replace(/-/g,'');
+  fetch('<c:url value="/law/cost/calcRateJson.do"/>?baseDt=' + baseDt, { credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'} })
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(!d.success){ document.getElementById('calc_rateInfo').textContent='요율을 불러오지 못했습니다.'; return; }
+      var g = {}; d.rates.forEach(function(r){ (g[r.calcType] = g[r.calcType] || []).push(r); });
+      CALC.rates = g;
+      // 사건종류(STAMP_MULT)
+      var ck = document.getElementById('cs_kind');
+      ck.innerHTML = (g.STAMP_MULT||[]).map(function(r){ return '<option value="'+r.itemCd+'">'+(r.rmk||r.itemCd)+'</option>'; }).join('');
+      // 사건유형(POST_COUNT)
+      var cd = document.getElementById('cd_kind');
+      cd.innerHTML = (g.POST_COUNT||[]).map(function(r){ return '<option value="'+r.itemCd+'">'+(r.rmk||r.itemCd)+'</option>'; }).join('');
+      // 우편료 단가
+      CALC.unit = (g.POST_UNIT && g.POST_UNIT[0]) ? Number(g.POST_UNIT[0].rateVal) : 0;
+      document.getElementById('cd_unit').value = fnCalcComma(CALC.unit);
+      // 법정이율 프리셋
+      var presetHtml = (g.LEGAL_INT||[]).map(function(r){
+        var nm = r.itemCd==='CIVIL'?'민사':(r.itemCd==='COMM'?'상사':(r.itemCd==='SOCHOK'?'소촉법':r.itemCd));
+        return '<button type="button" class="krds-btn small" data-rate="'+Number(r.rateVal)+'">'+nm+' '+Number(r.rateVal)+'%</button>';
+      }).join('');
+      document.getElementById('ci_presets1').innerHTML = presetHtml;
+      document.getElementById('ci_presets2').innerHTML = presetHtml;
+      var eff = d.rates.length ? d.rates[0].applyDt : '';
+      document.getElementById('calc_rateInfo').textContent = eff ? ('적용 요율: ' + eff.substring(0,4)+'.'+eff.substring(4,6)+'.'+eff.substring(6,8)+' 세트') : '';
+    }).catch(function(){ document.getElementById('calc_rateInfo').textContent='요율 로드 실패'; });
+}
+
+// 프리셋 버튼 → 가까운 이율 입력에 반영
+document.addEventListener('click', function(e){
+  var b = e.target.closest('.calc-presets .krds-btn'); if(!b) return;
+  var target = b.closest('#ci_presets1') ? 'ci_r1' : 'ci_r2';
+  document.getElementById(target).value = b.dataset.rate;
+});
+
+// 인지액 — 레거시 Calc_Stamp 이식: 구간 floor(amt*율/100)*100 + 가산, MIN_AMT floor, 사건종류 배율(정액=RATE_VAL 0)
+function fnCalcStamp(){
+  var amt = fnCalcInt('cs_amt');
+  var brackets = (CALC.rates.STAMP||[]).filter(function(r){ return r.itemCd==null; }).sort(function(a,b){ return Number(a.sectionAmt)-Number(b.sectionAmt); });
+  var minRow = (CALC.rates.STAMP||[]).filter(function(r){ return r.itemCd==='MIN_AMT'; })[0];
+  var minAmt = minRow ? Number(minRow.rateVal) : 0;
+  var mult = (CALC.rates.STAMP_MULT||[]).filter(function(r){ return r.itemCd===document.getElementById('cs_kind').value; })[0];
+  if(!brackets.length || !mult){ alert('요율을 불러오지 못했습니다.'); return; }
+  var insi = 0;
+  if(amt > 0){
+    var b = brackets[0];
+    for(var i=0;i<brackets.length;i++){ if(amt >= Number(brackets[i].sectionAmt)) b = brackets[i]; }
+    // 레거시 정수연산(parseInt(amt*pct/1000000)*100) 재현 — 부동소수 오차 제거 위해 마이크로 정수 단위로 계산 후 100원 절사
+    var rateMicro = Math.round(Number(b.rateVal) * 1e6);
+    insi = Math.floor(amt * rateMicro / 1e8) * 100 + Number(b.addAmt||0);
+    if(insi < minAmt) insi = minAmt;
+  }
+  var value;
+  if(Number(mult.rateVal) === 0){ value = Number(mult.addAmt||0); }   // 정액사건(강제경매·채권압류)
+  else { var multMicro = Math.round(Number(mult.rateVal) * 1e6); value = Math.floor(insi * multMicro / 1e8) * 100; }
+  document.getElementById('cs_out').textContent = fnCalcComma(value);
+}
+
+// 송달료 — 회수 × 당사자수 × 우편료 (레거시 Calc_Send)
+function fnCalcSend(){
+  var cnt = (CALC.rates.POST_COUNT||[]).filter(function(r){ return r.itemCd===document.getElementById('cd_kind').value; })[0];
+  if(!cnt){ alert('요율을 불러오지 못했습니다.'); return; }
+  var count = Number(cnt.rateVal);
+  var parties = fnCalcInt('cd_parties');
+  var unit = fnCalcInt('cd_unit');
+  var value = count * parties * unit;
+  document.getElementById('cd_out').textContent = fnCalcComma(value);
+  document.getElementById('cd_detail').textContent = '(' + count + '회 × ' + parties + '명 × ' + fnCalcComma(unit) + '원)';
+}
+
+// 변호사비 — 구간 base + (소가 - 구간하한) × 율 (레거시 Calc_Lawyer A세트)
+function fnCalcLawyer(){
+  var amt = fnCalcInt('cl_amt');
+  var rows = (CALC.rates.LAWYER||[]).slice().sort(function(a,b){ return Number(a.sectionAmt)-Number(b.sectionAmt); });
+  if(!rows.length){ alert('요율을 불러오지 못했습니다.'); return; }
+  var value = 0;
+  if(amt > 0){
+    var b = rows[0];
+    for(var i=0;i<rows.length;i++){ if(amt >= Number(rows[i].sectionAmt)) b = rows[i]; }
+    value = Math.round(Number(b.addAmt||0) + (amt - Number(b.sectionAmt)) * Number(b.rateVal));
+  }
+  document.getElementById('cl_out').textContent = fnCalcComma(value);
+}
+
+// 지연이자 — 서버 일할 계산
+function fnCalcInterest(){
+  var p = new URLSearchParams();
+  p.set('amount', fnCalcInt('ci_amt'));
+  p.set('day1From', (document.getElementById('ci_d1f').value||'').replace(/-/g,''));
+  p.set('day1To', (document.getElementById('ci_d1t').value||'').replace(/-/g,''));
+  p.set('rate1', document.getElementById('ci_r1').value||'');
+  p.set('day2From', (document.getElementById('ci_d2f').value||'').replace(/-/g,''));
+  p.set('day2To', (document.getElementById('ci_d2t').value||'').replace(/-/g,''));
+  p.set('rate2', document.getElementById('ci_r2').value||'');
+  fetch('<c:url value="/law/cost/calcInterestJson.do"/>', { method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'}, body:p.toString() })
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(!d.success){ alert(d.message||'계산 실패'); return; }
+      document.getElementById('ci_out').textContent = fnCalcComma(d.interest);
+      document.getElementById('ci_sum').textContent = fnCalcComma(d.result);
+    }).catch(function(){ alert('계산 요청 실패'); });
+}
+</script>

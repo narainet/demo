@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelVrsnCate_SQL_postgres.xml
+
+  관련자료 카테고리(TB_REL_VRSN_CATE) MyBatis 매핑.
+   - 회차(STEMP=IPROM_NO 문자열) + 법령(ILAW_ID) 페어 단위.
+   - SHIDE_DT="0" = 활성. itemCount = TB_REL_FILE 카운트 (레거시 기준).
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelVrsnCateMapper">
+
+	<resultMap id="relVrsnCateResult" type="narainet.rlms.related.service.RelVrsnCateVO">
+		<result property="cateNo"     column="IRVCATE_NO"/>
+		<result property="title"      column="STITLE"/>
+		<result property="seq"        column="ISEQ"/>
+		<result property="hideDt"     column="SHIDE_DT"/>
+		<result property="insDt"      column="SINS_DT"/>
+		<result property="lawId"      column="ILAW_ID"/>
+		<result property="tempPromNo" column="STEMP"/>
+		<result property="orgnDownYn" column="SORGNDOWN_YN"/>
+		<result property="itemCount"  column="CNT"/>
+	</resultMap>
+
+	<!--
+	  활성 카테고리 + 자료건수 (레거시 DAO getList 패턴).
+	  누적 조건:
+	    STEMP = promNo 자체 그대로 매칭 OR
+	    STEMP IN (같은 ILAW_ID 의 ILAW_NO ≤ 현재 회차의 promNo 목록)
+	  숨김: SHIDE_DT='0' 또는 SHIDE_DT >= today(YYYYMMDD)
+	-->
+	<select id="selectActiveList" resultMap="relVrsnCateResult">
+		SELECT RVC.IRVCATE_NO, RVC.STITLE, RVC.ISEQ, RVC.SHIDE_DT,
+		       RVC.SINS_DT, RVC.ILAW_ID, RVC.STEMP, RVC.SORGNDOWN_YN,
+		       ( SELECT COUNT(RF.IRFILE_NO)
+		           FROM TB_REL_VRSN RV
+		           JOIN TB_REL_FILE RF ON RV.IRVRSN_NO = RF.IRVRSN_NO
+		          WHERE RV.IRVCATE_NO = RVC.IRVCATE_NO
+		            AND RF.SDEL_YN   = 'N' ) AS CNT
+		  FROM TB_REL_VRSN_CATE RVC
+		 WHERE RVC.ILAW_ID = #{lawId}
+		   AND ( RVC.STEMP = CAST(#{promNo} AS VARCHAR)
+		      <if test="lawId != null and promNo != null">
+		         OR RVC.STEMP IN (
+		            SELECT CAST(P2.IPROM_NO AS VARCHAR)
+		              FROM TB_PROM P2, TB_PROM P0
+		             WHERE P2.ILAW_ID = #{lawId}
+		               AND P0.IPROM_NO = #{promNo}
+		               AND P2.ILAW_NO &lt;= P0.ILAW_NO
+		         )
+		      </if>
+		       )
+		   AND ( RVC.SHIDE_DT = '0' OR RVC.SHIDE_DT &gt;= #{today} )
+		 ORDER BY RVC.ISEQ, RVC.IRVCATE_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relVrsnCateResult">
+		SELECT IRVCATE_NO, STITLE, ISEQ, SHIDE_DT, SINS_DT, ILAW_ID, STEMP, SORGNDOWN_YN
+		  FROM TB_REL_VRSN_CATE
+		 WHERE IRVCATE_NO = #{cateNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelVrsnCateVO">
+		INSERT INTO TB_REL_VRSN_CATE (
+			IRVCATE_NO, STITLE, ISEQ, SHIDE_DT, SINS_DT, ILAW_ID, STEMP, SORGNDOWN_YN
+		) VALUES (
+			#{cateNo},
+			#{title},
+			#{seq,jdbcType=NUMERIC},
+			#{hideDt,jdbcType=VARCHAR},
+			#{insDt,jdbcType=VARCHAR},
+			#{lawId,jdbcType=NUMERIC},
+			#{tempPromNo,jdbcType=VARCHAR},
+			#{orgnDownYn,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelVrsnCateVO">
+		UPDATE TB_REL_VRSN_CATE
+		   SET STITLE       = #{title},
+		       ISEQ         = #{seq,jdbcType=NUMERIC},
+		       SHIDE_DT     = #{hideDt,jdbcType=VARCHAR},
+		       SORGNDOWN_YN = #{orgnDownYn,jdbcType=VARCHAR}
+		 WHERE IRVCATE_NO = #{cateNo}
+	</update>
+
+	<update id="updateTitle">
+		UPDATE TB_REL_VRSN_CATE SET STITLE = #{title} WHERE IRVCATE_NO = #{cateNo}
+	</update>
+
+	<update id="updateHide">
+		UPDATE TB_REL_VRSN_CATE SET SHIDE_DT = #{hideDt} WHERE IRVCATE_NO = #{cateNo}
+	</update>
+
+	<update id="updateOrgnDown">
+		UPDATE TB_REL_VRSN_CATE SET SORGNDOWN_YN = #{orgnDownYn} WHERE IRVCATE_NO = #{cateNo}
+	</update>
+
+	<update id="updateSeq">
+		UPDATE TB_REL_VRSN_CATE SET ISEQ = #{seq} WHERE IRVCATE_NO = #{cateNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_VRSN_CATE WHERE IRVCATE_NO = #{cateNo}
+	</delete>
+
+	<!--
+	  회차 삭제 동반 정리 (2026-07-30).
+	  TRG_DEL_PROM 은 TB_REL_VRSN(자료 본체)만 cascade 하고 카테고리 껍데기는 남긴다.
+	  카테고리는 시드/수동 생성 모두 STEMP = 소유 promNo 이므로 회차 단위로 지운다.
+	-->
+	<delete id="deleteByPromNo">
+		DELETE FROM TB_REL_VRSN_CATE WHERE STEMP = CAST(#{promNo} AS VARCHAR)
+	</delete>
+
+</mapper>

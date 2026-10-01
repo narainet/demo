@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelOrgn_SQL_oracle.xml
+
+  관련자료 — ORGN 액션 자식(TB_REL_ORGN) MyBatis 매핑.
+   - 활성(SDEL_YN='N') 만 조회.
+   - 조인: TB_ATTACH 에서 원본 파일명/확장자/사이즈 끌어오기.
+   - FILE 과 달리 분류(SCATE)/뷰어(SVIEW_YN) 컬럼 없음.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelOrgnMapper">
+
+	<resultMap id="relOrgnResult" type="narainet.rlms.related.service.RelOrgnVO">
+		<result property="relOrgnNo" column="IRORGN_NO"/>
+		<result property="relVrsnNo" column="IRVRSN_NO"/>
+		<result property="attNo"     column="IATT_NO"/>
+		<result property="title"     column="STITLE"/>
+		<result property="delYn"     column="SDEL_YN"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="sysId"     column="SSYS_ID"/>
+		<result property="attName"   column="ATT_NAME"/>
+		<result property="attExt"    column="ATT_EXT"/>
+		<result property="attSize"   column="ATT_SIZE"/>
+	</resultMap>
+
+	<sql id="relOrgnCols">
+		O.IRORGN_NO, O.IRVRSN_NO, O.IATT_NO, O.STITLE, O.SDEL_YN,
+		O.SINS_DT, O.SSYS_ID,
+		A.SNAME AS ATT_NAME, A.SEXT AS ATT_EXT, A.ISIZE AS ATT_SIZE
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relOrgnResult">
+		SELECT <include refid="relOrgnCols"/>
+		  FROM TB_REL_ORGN O
+		  LEFT OUTER JOIN TB_ATTACH A ON O.IATT_NO = A.IATT_NO
+		 WHERE O.IRVRSN_NO = #{relVrsnNo}
+		   AND O.SDEL_YN   = 'N'
+		 ORDER BY O.IRORGN_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relOrgnResult">
+		SELECT <include refid="relOrgnCols"/>
+		  FROM TB_REL_ORGN O
+		  LEFT OUTER JOIN TB_ATTACH A ON O.IATT_NO = A.IATT_NO
+		 WHERE O.IRORGN_NO = #{relOrgnNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelOrgnVO">
+		INSERT INTO TB_REL_ORGN (
+			IRORGN_NO, IRVRSN_NO, IATT_NO, STITLE, SDEL_YN,
+			SINS_DT
+		) VALUES (
+			#{relOrgnNo},
+			#{relVrsnNo},
+			#{attNo,jdbcType=NUMERIC},
+			#{title,jdbcType=VARCHAR},
+			#{delYn,jdbcType=VARCHAR},
+			#{insDt,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelOrgnVO">
+		UPDATE TB_REL_ORGN
+		   SET STITLE = #{title,jdbcType=VARCHAR}
+		 WHERE IRORGN_NO = #{relOrgnNo}
+	</update>
+
+	<update id="softDelete">
+		UPDATE TB_REL_ORGN SET SDEL_YN = 'Y' WHERE IRORGN_NO = #{relOrgnNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_ORGN WHERE IRORGN_NO = #{relOrgnNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_ORGN WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+</mapper>

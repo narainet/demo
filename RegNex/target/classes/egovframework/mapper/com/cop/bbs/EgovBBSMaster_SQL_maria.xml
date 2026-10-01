@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- 
+    수정일                 수정자           수정내용
+  =========     =======    =================================================
+  2020.07.14    신용호           게시판마스터 페이징처리 오류수정 (180. 게시판관리)
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="BBSMaster">
+
+	<resultMap id="boardMasterList" type="egovframework.com.cop.bbs.service.BoardMasterVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="bbsTyCode" column="BBS_TY_CODE"/>
+		<result property="bbsTyCodeNm" column="BBS_TY_CODE_NM"/>
+		<result property="bbsNm" column="BBS_NM"/>
+		<result property="tmplatId" column="TMPLAT_ID"/>
+		<result property="tmplatNm" column="TMPLAT_NM"/>
+		<result property="bbsSkinCode" column="BBS_SKIN_CODE"/>
+		<result property="useAt" column="USE_AT"/>
+		<result property="frstRegisterPnttm" column="FRST_REGIST_PNTTM"/>
+	</resultMap>
+
+	<resultMap id="boardMasterDetail" type="egovframework.com.cop.bbs.service.BoardMasterVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="bbsTyCode" column="BBS_TY_CODE"/>
+		<result property="bbsNm" column="BBS_NM"/>
+		<result property="bbsIntrcn" column="BBS_INTRCN"/>
+		<result property="replyPosblAt" column="REPLY_POSBL_AT"/>
+		<result property="fileAtchPosblAt" column="FILE_ATCH_POSBL_AT"/>
+		<result property="atchPosblFileNumber" column="ATCH_POSBL_FILE_NUMBER"/>
+		<result property="atchPosblFileSize" column="ATCH_POSBL_FILE_SIZE"/>
+		<result property="listPageUnit" column="LIST_PAGE_UNIT"/>
+		<result property="secretPosblAt" column="SECRET_POSBL_AT"/>
+		<result property="richEditorAt" column="RICH_EDITOR_AT"/>
+		<result property="searchIncldAt" column="SEARCH_INCLD_AT"/>
+		<result property="pagingAt" column="PAGING_AT"/>
+		<result property="searchBoxAt" column="SEARCH_BOX_AT"/>
+		<result property="tmplatId" column="TMPLAT_ID"/>
+		<result property="bbsSkinCode" column="BBS_SKIN_CODE"/>
+		<result property="bbsExtraField1" column="BBS_EXTRA_FIELD_1"/>
+		<result property="bbsExtraField2" column="BBS_EXTRA_FIELD_2"/>
+		<result property="bbsExtraField3" column="BBS_EXTRA_FIELD_3"/>
+		<result property="bbsExtraField4" column="BBS_EXTRA_FIELD_4"/>
+		<result property="bbsExtraField5" column="BBS_EXTRA_FIELD_5"/>
+		<result property="bbsExtraField6" column="BBS_EXTRA_FIELD_6"/>
+		<result property="bbsExtraField7" column="BBS_EXTRA_FIELD_7"/>
+		<result property="bbsExtraField8" column="BBS_EXTRA_FIELD_8"/>
+		<result property="bbsExtraField9" column="BBS_EXTRA_FIELD_9"/>
+		<result property="bbsExtraField10" column="BBS_EXTRA_FIELD_10"/>
+		<result property="bbsExtraFieldType1" column="BBS_EXTRA_FIELD_TYPE_1"/>
+		<result property="bbsExtraFieldType2" column="BBS_EXTRA_FIELD_TYPE_2"/>
+		<result property="bbsExtraFieldType3" column="BBS_EXTRA_FIELD_TYPE_3"/>
+		<result property="bbsExtraFieldType4" column="BBS_EXTRA_FIELD_TYPE_4"/>
+		<result property="bbsExtraFieldType5" column="BBS_EXTRA_FIELD_TYPE_5"/>
+		<result property="bbsExtraFieldType6" column="BBS_EXTRA_FIELD_TYPE_6"/>
+		<result property="bbsExtraFieldType7" column="BBS_EXTRA_FIELD_TYPE_7"/>
+		<result property="bbsExtraFieldType8" column="BBS_EXTRA_FIELD_TYPE_8"/>
+		<result property="bbsExtraFieldType9" column="BBS_EXTRA_FIELD_TYPE_9"/>
+		<result property="bbsExtraFieldType10" column="BBS_EXTRA_FIELD_TYPE_10"/>
+		<result property="bbsExtraFieldCodeId1" column="BBS_EXTRA_FIELD_CODE_ID_1"/>
+		<result property="bbsExtraFieldCodeId2" column="BBS_EXTRA_FIELD_CODE_ID_2"/>
+		<result property="bbsExtraFieldCodeId3" column="BBS_EXTRA_FIELD_CODE_ID_3"/>
+		<result property="bbsExtraFieldCodeId4" column="BBS_EXTRA_FIELD_CODE_ID_4"/>
+		<result property="bbsExtraFieldCodeId5" column="BBS_EXTRA_FIELD_CODE_ID_5"/>
+		<result property="bbsExtraFieldCodeId6" column="BBS_EXTRA_FIELD_CODE_ID_6"/>
+		<result property="bbsExtraFieldCodeId7" column="BBS_EXTRA_FIELD_CODE_ID_7"/>
+		<result property="bbsExtraFieldCodeId8" column="BBS_EXTRA_FIELD_CODE_ID_8"/>
+		<result property="bbsExtraFieldCodeId9" column="BBS_EXTRA_FIELD_CODE_ID_9"/>
+		<result property="bbsExtraFieldCodeId10" column="BBS_EXTRA_FIELD_CODE_ID_10"/>
+		<result property="frstRegisterId" column="FRST_REGISTER_ID"/>
+		<result property="frstRegisterNm" column="FRST_REGISTER_NM"/>
+		<result property="frstRegisterPnttm" column="FRST_REGIST_PNTTM"/>
+		<result property="bbsTyCodeNm" column="BBS_TY_CODE_NM"/>
+ 	    <result property="tmplatNm" column="TMPLAT_NM"/>
+	    <result property="tmplatSeCode" column="TMPLAT_SE_CODE"/>
+		<result property="authFlag" column="AUTH_FLAG"/>
+		<result property="tmplatCours" column="TMPLAT_COURS"/>
+		<result property="cmmntyId" column="CMMNTY_ID"/>
+		<result property="blogId" column="BLOG_ID"/>
+	</resultMap>
+
+	<resultMap id="boardMasterAll" type="egovframework.com.cop.bbs.service.BoardMasterVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="bbsTyCode" column="BBS_TY_CODE"/>
+		<result property="bbsNm" column="BBS_NM"/>
+		<result property="tmplatId" column="TMPLAT_ID"/>
+		<result property="bbsSkinCode" column="BBS_SKIN_CODE"/>
+	</resultMap>
+
+	<resultMap id="BBSListPortlet" type="egovframework.com.cop.bbs.service.BoardMasterVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="bbsTyCodeNm" column="BBS_TY_CODE"/>
+		<result property="bbsNm" column="BBS_NM"/>
+	</resultMap>
+
+	<!-- 속성폼 템플릿 select 옵션 -->
+	<resultMap id="templateOption" type="egovframework.com.cop.bbs.service.BoardMasterVO">
+		<result property="tmplatId" column="TMPLAT_ID"/>
+		<result property="tmplatNm" column="TMPLAT_NM"/>
+		<result property="tmplatSeCode" column="TMPLAT_SE_CODE"/>
+	</resultMap>
+	<select id="selectTemplateList" resultMap="templateOption">
+		SELECT TMPLAT_ID, TMPLAT_NM, TMPLAT_SE_CODE
+		FROM COMTNTMPLATINFO
+		WHERE USE_AT = 'Y'
+		ORDER BY TMPLAT_ID
+	</select>
+
+	<insert id="insertBBSMaster" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO">
+		
+			INSERT INTO COMTNBBSMASTER
+			(BBS_ID, BBS_TY_CODE, BBS_NM, BBS_INTRCN, 
+			 REPLY_POSBL_AT, FILE_ATCH_POSBL_AT, ATCH_POSBL_FILE_NUMBER,
+			 TMPLAT_ID, BBS_SKIN_CODE,
+			 BBS_EXTRA_FIELD_1, BBS_EXTRA_FIELD_2, BBS_EXTRA_FIELD_3, BBS_EXTRA_FIELD_4, BBS_EXTRA_FIELD_5,
+			 BBS_EXTRA_FIELD_6, BBS_EXTRA_FIELD_7, BBS_EXTRA_FIELD_8, BBS_EXTRA_FIELD_9, BBS_EXTRA_FIELD_10,
+			 BBS_EXTRA_FIELD_TYPE_1, BBS_EXTRA_FIELD_TYPE_2, BBS_EXTRA_FIELD_TYPE_3, BBS_EXTRA_FIELD_TYPE_4, BBS_EXTRA_FIELD_TYPE_5,
+			 BBS_EXTRA_FIELD_TYPE_6, BBS_EXTRA_FIELD_TYPE_7, BBS_EXTRA_FIELD_TYPE_8, BBS_EXTRA_FIELD_TYPE_9, BBS_EXTRA_FIELD_TYPE_10,
+			 BBS_EXTRA_FIELD_CODE_ID_1, BBS_EXTRA_FIELD_CODE_ID_2, BBS_EXTRA_FIELD_CODE_ID_3, BBS_EXTRA_FIELD_CODE_ID_4, BBS_EXTRA_FIELD_CODE_ID_5,
+			 BBS_EXTRA_FIELD_CODE_ID_6, BBS_EXTRA_FIELD_CODE_ID_7, BBS_EXTRA_FIELD_CODE_ID_8, BBS_EXTRA_FIELD_CODE_ID_9, BBS_EXTRA_FIELD_CODE_ID_10,
+			 USE_AT, CMMNTY_ID,
+			 ATCH_POSBL_FILE_SIZE, LIST_PAGE_UNIT, SECRET_POSBL_AT, RICH_EDITOR_AT, SEARCH_INCLD_AT, PAGING_AT, SEARCH_BOX_AT,
+			 FRST_REGISTER_ID, FRST_REGIST_PNTTM, BLOG_ID, BLOG_AT )
+			VALUES
+			( #{bbsId}, #{bbsTyCode}, #{bbsNm}, #{bbsIntrcn}, 
+			  #{replyPosblAt}, #{fileAtchPosblAt}, #{atchPosblFileNumber}, 
+			  #{tmplatId}, #{bbsSkinCode},
+			  #{bbsExtraField1}, #{bbsExtraField2}, #{bbsExtraField3}, #{bbsExtraField4}, #{bbsExtraField5},
+			  #{bbsExtraField6}, #{bbsExtraField7}, #{bbsExtraField8}, #{bbsExtraField9}, #{bbsExtraField10},
+			  #{bbsExtraFieldType1}, #{bbsExtraFieldType2}, #{bbsExtraFieldType3}, #{bbsExtraFieldType4}, #{bbsExtraFieldType5},
+			  #{bbsExtraFieldType6}, #{bbsExtraFieldType7}, #{bbsExtraFieldType8}, #{bbsExtraFieldType9}, #{bbsExtraFieldType10},
+			  #{bbsExtraFieldCodeId1}, #{bbsExtraFieldCodeId2}, #{bbsExtraFieldCodeId3}, #{bbsExtraFieldCodeId4}, #{bbsExtraFieldCodeId5},
+			  #{bbsExtraFieldCodeId6}, #{bbsExtraFieldCodeId7}, #{bbsExtraFieldCodeId8}, #{bbsExtraFieldCodeId9}, #{bbsExtraFieldCodeId10},
+			  #{useAt}, #{cmmntyId},
+			  <choose><when test='atchPosblFileSize != null and atchPosblFileSize != ""'>#{atchPosblFileSize}</when><otherwise>NULL</otherwise></choose>, #{listPageUnit}, #{secretPosblAt}, #{richEditorAt}, #{searchIncldAt}, #{pagingAt}, #{searchBoxAt},
+			  #{frstRegisterId}, SYSDATE(), #{blogId}, #{blogAt}
+			 )			
+		
+	</insert>
+	
+	<select id="selectBBSMasterList" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO" resultMap="boardMasterList">
+		
+		
+			SELECT 
+				a.BBS_ID, a.BBS_TY_CODE, b.CODE_NM as BBS_TY_CODE_NM,
+				a.BBS_NM, 
+				a.TMPLAT_ID, a.BBS_SKIN_CODE, a.USE_AT,
+				t.TMPLAT_NM,
+				TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD') as FRST_REGIST_PNTTM,
+				d.USER_NM AS FRST_REGISTER_NM
+			FROM
+				COMTNBBSMASTER a
+			LEFT OUTER JOIN 
+				(SELECT CODE_ID, CODE, CODE_NM FROM 
+					COMTCCMMNDETAILCODE WHERE CODE_ID = 'COM101' AND USE_AT='Y') b
+				ON a.BBS_TY_CODE = b.CODE
+			LEFT OUTER JOIN
+				(SELECT ESNTL_ID, USER_ID, USER_NM FROM COMVNUSERMASTER) d
+				ON a.FRST_REGISTER_ID = d.ESNTL_ID
+			LEFT OUTER JOIN
+				COMTNTMPLATINFO t
+				ON a.TMPLAT_ID = t.TMPLAT_ID
+			WHERE 1=1
+			<if test='cmmntyId != null and cmmntyId != ""'>
+				AND a.CMMNTY_ID = #{cmmntyId}
+			</if>
+			<if test="searchCnd == 0">AND
+					a.BBS_NM LIKE '%' || #{searchWrd} || '%' 		
+			</if>
+			<if test="searchCnd == 1">AND
+					a.BBS_INTRCN LIKE '%' || #{searchWrd} || '%'		
+			</if>	
+					
+			ORDER BY a.FRST_REGIST_PNTTM DESC 
+			LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+						
+	</select>
+		
+	<select id="selectBBSMasterListTotCnt" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO" resultType="java.lang.Integer">
+		
+			SELECT 
+				COUNT(a.BBS_ID)
+			FROM
+				COMTNBBSMASTER a
+			LEFT OUTER JOIN 
+				(SELECT CODE_ID, CODE, CODE_NM FROM 
+					COMTCCMMNDETAILCODE WHERE CODE_ID = 'COM101' AND USE_AT='Y') b
+				ON a.BBS_TY_CODE = b.CODE
+			WHERE 1=1
+			<if test='cmmntyId != null and cmmntyId != ""'>AND 
+					a.CMMNTY_ID = #{cmmntyId}
+			</if>
+			<if test="searchCnd == 0">AND
+					a.BBS_NM LIKE '%' || #{searchWrd} || '%' 		
+			</if>
+			<if test="searchCnd == 1">AND
+					a.BBS_INTRCN LIKE '%' || #{searchWrd} || '%' 		
+			</if>
+	</select>
+	
+	<select id="selectBBSMasterDetail" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO" resultMap="boardMasterDetail">
+		
+			SELECT 
+				a.BBS_ID, a.BBS_TY_CODE, b.CODE_NM as BBS_TY_CODE_NM, a.BBS_INTRCN, 
+				a.BBS_NM, 
+				a.TMPLAT_ID, a.BBS_SKIN_CODE,
+				a.BBS_EXTRA_FIELD_1, a.BBS_EXTRA_FIELD_2, a.BBS_EXTRA_FIELD_3, a.BBS_EXTRA_FIELD_4, a.BBS_EXTRA_FIELD_5,
+				a.BBS_EXTRA_FIELD_6, a.BBS_EXTRA_FIELD_7, a.BBS_EXTRA_FIELD_8, a.BBS_EXTRA_FIELD_9, a.BBS_EXTRA_FIELD_10,
+				a.BBS_EXTRA_FIELD_TYPE_1, a.BBS_EXTRA_FIELD_TYPE_2, a.BBS_EXTRA_FIELD_TYPE_3, a.BBS_EXTRA_FIELD_TYPE_4, a.BBS_EXTRA_FIELD_TYPE_5,
+				a.BBS_EXTRA_FIELD_TYPE_6, a.BBS_EXTRA_FIELD_TYPE_7, a.BBS_EXTRA_FIELD_TYPE_8, a.BBS_EXTRA_FIELD_TYPE_9, a.BBS_EXTRA_FIELD_TYPE_10,
+				a.BBS_EXTRA_FIELD_CODE_ID_1, a.BBS_EXTRA_FIELD_CODE_ID_2, a.BBS_EXTRA_FIELD_CODE_ID_3, a.BBS_EXTRA_FIELD_CODE_ID_4, a.BBS_EXTRA_FIELD_CODE_ID_5,
+				a.BBS_EXTRA_FIELD_CODE_ID_6, a.BBS_EXTRA_FIELD_CODE_ID_7, a.BBS_EXTRA_FIELD_CODE_ID_8, a.BBS_EXTRA_FIELD_CODE_ID_9, a.BBS_EXTRA_FIELD_CODE_ID_10,
+				d.TMPLAT_NM, d.TMPLAT_SE_CODE, d.TMPLAT_COURS, a.FILE_ATCH_POSBL_AT, a.ATCH_POSBL_FILE_NUMBER,
+				a.ATCH_POSBL_FILE_SIZE, a.REPLY_POSBL_AT, a.FRST_REGISTER_ID, e.USER_NM as FRST_REGISTER_NM, a.CMMNTY_ID, 
+				a.USE_AT, TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD') as FRST_REGIST_PNTTM				
+				<!-- COMTNBBSUSE(게시판 사용등록) 폐기 2026-07-10 — 표준 잔재, 신규 DB 미생성.
+				     라이브도 0행이라 종전 결과 = 항상 NULL. AUTH_FLAG 소비처 없음(resultMap 호환용 리터럴). -->
+				,a.LIST_PAGE_UNIT, a.SECRET_POSBL_AT, a.RICH_EDITOR_AT, a.SEARCH_INCLD_AT, a.PAGING_AT, a.SEARCH_BOX_AT
+				,NULL as AUTH_FLAG
+			FROM
+				COMTNBBSMASTER a
+			LEFT OUTER JOIN 
+				(SELECT CODE_ID, CODE, CODE_NM FROM COMTCCMMNDETAILCODE WHERE CODE_ID = 'COM101' AND USE_AT='Y') b
+				ON a.BBS_TY_CODE = b.CODE
+			LEFT OUTER JOIN COMTNTMPLATINFO d
+				ON a.TMPLAT_ID = d.TMPLAT_ID				
+			LEFT OUTER JOIN COMVNUSERMASTER e
+				ON a.FRST_REGISTER_ID = e.ESNTL_ID		
+			WHERE a.BBS_ID = #{bbsId}
+						
+	</select>
+	
+ 	<update id="updateBBSMaster" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO">
+ 		
+			UPDATE COMTNBBSMASTER SET 
+				BBS_NM = #{bbsNm},
+				BBS_INTRCN = #{bbsIntrcn}, 
+				BBS_TY_CODE = #{bbsTyCode},
+				FILE_ATCH_POSBL_AT = #{fileAtchPosblAt},
+				ATCH_POSBL_FILE_NUMBER = #{atchPosblFileNumber},
+				ATCH_POSBL_FILE_SIZE = <choose><when test='atchPosblFileSize != null and atchPosblFileSize != ""'>#{atchPosblFileSize}</when><otherwise>NULL</otherwise></choose>,
+				TMPLAT_ID = #{tmplatId},
+				BBS_SKIN_CODE = #{bbsSkinCode},
+				BBS_EXTRA_FIELD_1 = #{bbsExtraField1},
+				BBS_EXTRA_FIELD_2 = #{bbsExtraField2},
+				BBS_EXTRA_FIELD_3 = #{bbsExtraField3},
+				BBS_EXTRA_FIELD_4 = #{bbsExtraField4},
+				BBS_EXTRA_FIELD_5 = #{bbsExtraField5},
+				BBS_EXTRA_FIELD_6 = #{bbsExtraField6},
+				BBS_EXTRA_FIELD_7 = #{bbsExtraField7},
+				BBS_EXTRA_FIELD_8 = #{bbsExtraField8},
+				BBS_EXTRA_FIELD_9 = #{bbsExtraField9},
+				BBS_EXTRA_FIELD_10 = #{bbsExtraField10},
+				BBS_EXTRA_FIELD_TYPE_1 = #{bbsExtraFieldType1},
+				BBS_EXTRA_FIELD_TYPE_2 = #{bbsExtraFieldType2},
+				BBS_EXTRA_FIELD_TYPE_3 = #{bbsExtraFieldType3},
+				BBS_EXTRA_FIELD_TYPE_4 = #{bbsExtraFieldType4},
+				BBS_EXTRA_FIELD_TYPE_5 = #{bbsExtraFieldType5},
+				BBS_EXTRA_FIELD_TYPE_6 = #{bbsExtraFieldType6},
+				BBS_EXTRA_FIELD_TYPE_7 = #{bbsExtraFieldType7},
+				BBS_EXTRA_FIELD_TYPE_8 = #{bbsExtraFieldType8},
+				BBS_EXTRA_FIELD_TYPE_9 = #{bbsExtraFieldType9},
+				BBS_EXTRA_FIELD_TYPE_10 = #{bbsExtraFieldType10},
+				BBS_EXTRA_FIELD_CODE_ID_1 = #{bbsExtraFieldCodeId1},
+				BBS_EXTRA_FIELD_CODE_ID_2 = #{bbsExtraFieldCodeId2},
+				BBS_EXTRA_FIELD_CODE_ID_3 = #{bbsExtraFieldCodeId3},
+				BBS_EXTRA_FIELD_CODE_ID_4 = #{bbsExtraFieldCodeId4},
+				BBS_EXTRA_FIELD_CODE_ID_5 = #{bbsExtraFieldCodeId5},
+				BBS_EXTRA_FIELD_CODE_ID_6 = #{bbsExtraFieldCodeId6},
+				BBS_EXTRA_FIELD_CODE_ID_7 = #{bbsExtraFieldCodeId7},
+				BBS_EXTRA_FIELD_CODE_ID_8 = #{bbsExtraFieldCodeId8},
+				BBS_EXTRA_FIELD_CODE_ID_9 = #{bbsExtraFieldCodeId9},
+				BBS_EXTRA_FIELD_CODE_ID_10 = #{bbsExtraFieldCodeId10},
+				LIST_PAGE_UNIT = #{listPageUnit},
+				SECRET_POSBL_AT = #{secretPosblAt},
+				RICH_EDITOR_AT = #{richEditorAt},
+				SEARCH_INCLD_AT = #{searchIncldAt},
+				PAGING_AT = #{pagingAt},
+				SEARCH_BOX_AT = #{searchBoxAt},
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				LAST_UPDT_PNTTM = SYSDATE(),
+				USE_AT = #{useAt}
+			WHERE BBS_ID = #{bbsId}
+ 		
+ 	</update>
+
+ 	<update id="deleteBBSMaster" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO">
+ 		
+			UPDATE COMTNBBSMASTER SET 
+				USE_AT = 'N',
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				LAST_UPDT_PNTTM = SYSDATE()
+			WHERE BBS_ID = #{bbsId}
+ 		
+ 	</update>
+
+ 	<update id="deleteBBSArticles" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO">
+ 		
+			UPDATE COMTNBBS SET 
+				USE_AT = 'N',
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				LAST_UPDT_PNTTM = SYSDATE()
+			WHERE BBS_ID = #{bbsId}
+ 		
+ 	</update>
+
+ 	<update id="deleteBBSMasterAtchFiles" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO">
+ 		
+			UPDATE COMTNFILE SET
+				USE_AT = 'N'
+			WHERE ATCH_FILE_ID IN (
+				SELECT DISTINCT ATCH_FILE_ID
+				FROM COMTNBBS
+				WHERE BBS_ID = #{bbsId}
+				AND ATCH_FILE_ID IS NOT NULL
+			)
+ 		
+ 	</update>
+
+	<select id="selectBBSListPortlet" parameterType="egovframework.com.cop.bbs.service.BoardMasterVO" resultMap="BBSListPortlet">
+		
+			SELECT 
+				BBS_ID, BBS_TY_CODE, BBS_NM, FRST_REGIST_PNTTM
+			FROM
+				COMTNBBSMASTER
+			WHERE USE_AT = 'Y' 
+			ORDER BY FRST_REGIST_PNTTM DESC
+		
+	</select>	
+
+</mapper>

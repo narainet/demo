@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  화면 레이아웃(셸) 매핑.  egovframework.com.cmm.util.EgovLayoutResolver 가 읽는다.
+
+  ※ 2026-08-07 SiteMesh 2 제거로 decorators.xml 을 이 파일로 대체했다.
+     데코레이션 주체가 "응답 필터"에서 "JSP 태그파일(/WEB-INF/tags/layout.tag)" 로 바뀌었을 뿐,
+     URL → 셸 매핑 규칙과 패턴 목록은 아래 그대로다(화면별 레이아웃이 바뀌지 않도록).
+
+  셸 종류 (/WEB-INF/tags/shell/*.tag):
+    - mgr    : 업무관리자 화면 (상단 헤더 + GNB + 좌측 LNB + 본문)
+    - front  : 사용자 화면 (상단 헤더 + GNB + 빠른검색 + 본문)
+    - plain  : 로그인 / 에러 / 단순 화면 (중앙 단일 컬럼 카드)
+    - popup  : 팝업 / iframe / dialog (헤더 없이 본문만, KRDS 톤 유지)
+
+  매칭 규칙 (SiteMesh PathMapper 와 동일):
+    1) 정확 일치 패턴이 있으면 그것
+    2) 없으면 와일드카드 패턴 중 "가장 긴 패턴" 승리
+    3) 그래도 없으면 default 속성의 셸
+
+  ⛔ SiteMesh 의 <excludes> 는 이 파일에 없다 — 이제 <lay:layout> 태그를 쓴 JSP 만 데코레이트되므로
+     정적 리소스·JSON 응답·비HTML 은 애초에 이 매핑을 타지 않는다. (전에는 필터가 전 요청을 훑었다.)
+     단 "자체 완결 레이아웃이라 일부러 제외했던 화면"(code404/500.jsp 등)은 해당 JSP 를 아예
+     감싸지 않는 것으로 옮겼다 — 감싸면 이중 레이아웃이 된다.
+-->
+<layouts default="plain">
+
+    <!--
+      1) 로그인 / 에러 화면 — 사이드 메뉴 없는 깔끔한 단일 컬럼
+    -->
+    <layout name="plain">
+        <pattern>/uat/uia/*</pattern>
+        <pattern>/sec/ram/accessDenied.do</pattern>
+        <pattern>/egovframework/com/cmm/error/*</pattern>
+        <pattern>*/error*</pattern>
+    </layout>
+
+    <!--
+      1.5) 팝업 / iframe / 검색 dialog — 헤더(GNB) 없는 본문만.
+           부모 창에 이미 헤더 있음 → 중복 방지. KRDS 톤은 유지.
+           mgr 보다 위에 둬서 SiteMesh 가 popup 패턴을 먼저 매칭하도록.
+    -->
+    <layout name="popup">
+        <!-- 일반적인 팝업/모달 명명 -->
+        <pattern>*Pop.do</pattern>
+        <pattern>*Popup.do</pattern>
+        <pattern>*PopupFrame.do</pattern>
+
+        <!-- 팝업창관리 '오픈' — window.open/iframe 으로 뜨는 실제 팝업 콘텐츠(E모드 자체완결 EgovPopupContent /
+             F모드 파일URL 샘플페이지). 이름이 *Popup.do 에 안 걸림(openPopupManage.do) → 정확 경로로 매핑.
+             SiteMesh 최장매칭: 이 34자 경로가 mgr 의 /uss/ion/pwm/*(12자) 를 이겨 헤더리스로 뜬다.
+             (excludes 로 빼지 않고 popup 데코로 라우팅하는 것은 KRDS 셸을 유지하려는 의도적 선택.) -->
+        <pattern>/uss/ion/pwm/openPopupManage.do</pattern>
+
+        <!-- jQuery UI dialog 안 iframe 으로 뜨는 New 변종 -->
+        <pattern>*SearchNew.do</pattern>
+        <pattern>*MvmnNew.do</pattern>
+
+        <!-- 표준프레임워크 명시 팝업 URL (이름이 위 패턴에 안 잡히는 것들) -->
+        <pattern>/sym/prm/EgovProgramListSearch.do</pattern>
+        <pattern>/sym/mnu/mpm/EgovMenuListSelectMvmn.do</pattern>
+        <pattern>/sym/mnu/mcm/EgovMenuCreatSiteMapSelect.do</pattern>
+        <pattern>/sym/log/lgm/SelectSysLogDetail.do</pattern>
+        <pattern>/sym/log/clg/SelectLoginLogDetail.do</pattern>
+        <pattern>/sym/log/wlg/SelectWebLogDetail.do</pattern>
+        <pattern>/sym/log/ulg/SelectUserLogDetail.do</pattern>
+        <pattern>/sym/log/plg/SelectPrivacyLogDetail.do</pattern>
+        <pattern>/uss/umt/EgovIdDplctCnfirm.do</pattern>
+        <pattern>/uss/umt/EgovIdDplctCnfirmView.do</pattern>
+        <!-- 부서권한관리의 부서조회 dialog(iframe) — mgr 의 /sec/* 를 정확 경로(최장 매칭)로 재역전.
+             빠지면 520px 다이얼로그 안에 관리자 GNB/LNB 전체가 들어가는 이중 레이아웃이 된다(2026-07-28). -->
+        <pattern>/sec/drm/EgovDeptSearchList.do</pattern>
+
+        <!-- 규정 미리보기 — 자체 툴바+트리를 가진 전체화면 문서뷰.
+             mgr(GNB+LNB) 로 감싸면 이중 레이아웃으로 빽빽해져 사용자 전문뷰어 룩과 어긋남.
+             ※ SiteMesh 는 "가장 긴 패턴" 승리 — 이 풀경로(21자) > /rlms/prom/*(12자) 라 popup 이 이김. -->
+        <pattern>/rlms/prom/preview.do</pattern>
+        <!-- 신구대조 결과 — 사용자 전문뷰어의 "신구대조" 버튼이 인페이지 iframe 모달로 띄움.
+             GNB 중복 방지 위해 헤더리스 popup 데코(직접 진입도 본문만 깔끔히 표시). -->
+        <pattern>/rlms/prom/diffByPromNo.do</pattern>
+    </layout>
+
+    <!--
+      2) 사용자 화면 (front) — 검색 GNB + 메모/즐겨찾기 레이어 + 본문
+         레거시 의 /lims/front/* 와 유사한 레이아웃.
+    -->
+    <layout name="front">
+        <!-- 사용자 홈 -->
+        <pattern>/rlms/index.do</pattern>
+        <pattern>/rlms/fulltext/*</pattern>
+        <pattern>/rlms/favor/*</pattern>
+        <pattern>/rlms/memo/*</pattern>
+        <!-- 내 계정 (표준 uss/umt 셀프서비스: 내정보수정 / 비밀번호 변경 / 로그인 IP / 로그인 내역).
+             더 긴 패턴이 mgr 의 /uss/* 를 이김. -->
+        <pattern>/uss/umt/my/*</pattern>
+        <!-- 규정맵(기능별분류) 사용자 뷰어 — 정확 패턴(최장 매칭)으로 front 가 mgr 의 /rlms/prommap/* 를 이김 -->
+        <pattern>/rlms/prommap/view.do</pattern>
+        <!-- 법령질의 공개열람 — 정확 패턴(최장 매칭)으로 front 가 mgr 의 /rlms/lawquest/* 를 이김 -->
+        <pattern>/rlms/lawquest/lawQuestFrontList.do</pattern>
+        <pattern>/rlms/lawquest/lawQuestFrontView.do</pattern>
+        <!-- (2026-07-29 삭제) /rlms/prom/selectPromDetail.do · /rlms/prom/searchHistory.do 의 사용자 셸 매핑.
+             둘 다 관리 화면이라(수정·삭제·IDE 편집 링크 보유) 인가에서 편집계 3역할로 좁혔고,
+             searchHistory.do 는 핸들러 자체를 폐기했다. 사용자 본문 조회 정본 = /rlms/fulltext/provisionList.do -->
+        <!-- 도움말 — 표준 olh(FAQ/QnA)를 사용자 데코로(재사용 원칙, 2026-07-09 커스텀 /rlms/helpdesk 폐기).
+             더 긴 패턴이 mgr 의 /uss/* 를 이김. QnA 답변관리 4종만 mgr 정확 패턴으로 재역전(아래). -->
+        <pattern>/uss/olh/faq/*</pattern>
+        <pattern>/uss/olh/qna/*</pattern>
+        <!-- 게시판 열람(표준 cop/bbs 재사용) — EgovBoardUserController 의 /cop/bbs/user/* 만 사용자 데코.
+             관리 동선(/cop/bbs/*)은 아래 mgr 유지. 더 긴 패턴이 mgr 의 /cop/* 를 이김. -->
+        <pattern>/cop/bbs/user/*</pattern>
+        <!-- 댓글·만족도 사용자 동선(JSON) — *Json.do 는 excludes 로 셸 제외되지만, 예외/비-Json 렌더가
+             관리자 셸로 새는 것을 막기 위해 사용자 데코로 잡아둔다. -->
+        <pattern>/cop/cmt/user/*</pattern>
+        <pattern>/cop/stf/user/*</pattern>
+    </layout>
+
+    <!--
+      3) 업무관리자 화면 (mgr) — LNB 좌측 + 상단 헤더 + 본문
+         RLMS 의 모든 업무 관리 화면 + eGov 표준 백오피스(uss/umt, sec/*, sym/*, cop/bbs 등).
+         decorator name="admin" 에서 "mgr" 로 변경 — 보안 점검 대응.
+    -->
+    <layout name="mgr">
+        <pattern>/rlms/cate/*</pattern>
+        <pattern>/rlms/prom/*</pattern>
+        <pattern>/rlms/promwork/*</pattern>
+        <pattern>/rlms/gaejung/*</pattern>
+        <pattern>/rlms/attach/*</pattern>
+        <pattern>/rlms/prommap/*</pattern>
+        <pattern>/rlms/lawquest/*</pattern>
+        <pattern>/rlms/stats/*</pattern>
+        <!-- 필수 열람 현황(dutyStatus) — 관리 화면. JSON API(*Json.do)는 excludes, POST 응답은 비HTML 라 무관 -->
+        <pattern>/rlms/readduty/*</pattern>
+        <pattern>/rlms/mgr/*</pattern>
+
+        <!-- eGov 표준 백오피스 -->
+        <pattern>/uss/*</pattern>
+        <!-- 팝업창관리(listPopup/registPopup/updtPopup/detailPopup)가 *Popup.do(popup 헤더리스 데코)에 잡힘
+             → 더 긴 패턴으로 mgr 우선(SiteMesh 최장 매칭). -->
+        <pattern>/uss/ion/pwm/*</pattern>
+        <!-- QnA 답변관리(관리자 전용, egov 원형 JSP) — front 의 /uss/olh/qna/* 를 정확 패턴으로 재역전 -->
+        <pattern>/uss/olh/qna/selectQnaAnswerList.do</pattern>
+        <pattern>/uss/olh/qna/selectQnaAnswerDetail.do</pattern>
+        <pattern>/uss/olh/qna/updateQnaAnswerView.do</pattern>
+        <pattern>/uss/olh/qna/updateQnaAnswer.do</pattern>
+        <!-- FAQ 관리 화면(편집계 전용) — 사용자 열람(selectFaqUserList)과 URL 분리(2026-07-09), mgr 재역전 -->
+        <pattern>/uss/olh/faq/selectFaqList.do</pattern>
+        <pattern>/uss/olh/faq/selectFaqDetail.do</pattern>
+        <pattern>/uss/olh/faq/insertFaqView.do</pattern>
+        <pattern>/uss/olh/faq/insertFaq.do</pattern>
+        <pattern>/uss/olh/faq/updateFaqView.do</pattern>
+        <pattern>/uss/olh/faq/updateFaq.do</pattern>
+        <pattern>/uss/olh/faq/deleteFaq.do</pattern>
+        <pattern>/sec/*</pattern>
+        <pattern>/sym/*</pattern>
+        <pattern>/cop/*</pattern>
+        <pattern>/dam/*</pattern>
+        <pattern>/ext/*</pattern>
+        <!-- 로그인정책관리(/uat/uap/*). 로그인/인증 화면(/uat/uia/*)은 plain 셸 유지. -->
+        <pattern>/uat/uap/*</pattern>
+
+        <!-- 루트 인덱스(welcome-file) — /main.do 로 forward -->
+        <pattern>/index.jsp</pattern>
+    </layout>
+
+</layouts>

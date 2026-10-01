@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelFile_SQL_oracle.xml
+
+  관련자료 — FILE 액션 자식(TB_REL_FILE) MyBatis 매핑.
+   - 활성(SDEL_YN='N') 만 조회.
+   - 조인: TB_ATTACH 에서 원본 파일명/확장자/사이즈 끌어오기.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelFileMapper">
+
+	<resultMap id="relFileResult" type="narainet.rlms.related.service.RelFileVO">
+		<result property="relFileNo"   column="IRFILE_NO"/>
+		<result property="relVrsnNo"   column="IRVRSN_NO"/>
+		<result property="attNo"       column="IATT_NO"/>
+		<result property="cate"        column="SCATE"/>
+		<result property="title"       column="STITLE"/>
+		<result property="delYn"       column="SDEL_YN"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="sysId"       column="SSYS_ID"/>
+		<result property="viewYn"      column="SVIEW_YN"/>
+		<result property="viewCmpltYn" column="SVIEW_CMPLT_YN"/>
+		<result property="attName"     column="ATT_NAME"/>
+		<result property="attExt"      column="ATT_EXT"/>
+		<result property="attSize"     column="ATT_SIZE"/>
+	</resultMap>
+
+	<sql id="relFileCols">
+		F.IRFILE_NO, F.IRVRSN_NO, F.IATT_NO, F.SCATE, F.STITLE, F.SDEL_YN,
+		F.SINS_DT, F.SSYS_ID, F.SVIEW_YN, F.SVIEW_CMPLT_YN,
+		A.SNAME AS ATT_NAME, A.SEXT AS ATT_EXT, A.ISIZE AS ATT_SIZE
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relFileResult">
+		SELECT <include refid="relFileCols"/>
+		  FROM TB_REL_FILE F
+		  LEFT OUTER JOIN TB_ATTACH A ON F.IATT_NO = A.IATT_NO
+		 WHERE F.IRVRSN_NO = #{relVrsnNo}
+		   AND F.SDEL_YN   = 'N'
+		 ORDER BY F.IRFILE_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relFileResult">
+		SELECT <include refid="relFileCols"/>
+		  FROM TB_REL_FILE F
+		  LEFT OUTER JOIN TB_ATTACH A ON F.IATT_NO = A.IATT_NO
+		 WHERE F.IRFILE_NO = #{relFileNo}
+	</select>
+
+	<!--
+	  ★ 사용자 뷰어, 열람가능 파일 누적 조회 (레거시 RelatedVersionService.getContentsList 이식).
+	    같은 법령(ILAW_ID) 회차들(ILAW_NO 이하) 중 마스터 ICTNS_ID 별 최신 회차의 행만 채택.
+	    SVRSN_YN='Y'(회차간 상속) 만 과거 회차에서 끌어오고, 'N'/NULL 은 자기 회차 전용.
+	    회차단위(SFLAG=PROMULGATION/NULL) + 뷰어제공(SVIEW_YN='Y') + 본문참조 카테고리만.
+	    ※ 내부 MAX 에는 SDEL_YN 필터를 두지 않는다 (레거시 동일) — 삭제 tombstone 이 MAX 를
+	      차지해 바깥 SDEL_YN='N' 에서 탈락 = 계보 숨김. 내부에 두면 삭제 전 행이 부활한다.
+	    정렬: 레거시 ORDER BY 와 동일 — 분류명(본문>붙임>양식>기타), ISEQ, IRVRSN_NO.
+	-->
+	<select id="selectViewableListCumulative" resultMap="relFileResult">
+		SELECT <include refid="relFileCols"/>
+		  FROM TB_REL_FILE F
+		  JOIN TB_REL_VRSN V  ON V.IRVRSN_NO = F.IRVRSN_NO
+		  JOIN TB_PROM PR     ON PR.IPROM_NO = V.IPROM_NO
+		  JOIN ( SELECT MAX(PR2.ILAW_NO) AS LAW_NO, V2.ICTNS_ID
+		           FROM TB_REL_FILE F2
+		           JOIN TB_REL_VRSN V2 ON V2.IRVRSN_NO = F2.IRVRSN_NO
+		           JOIN TB_PROM PR2    ON PR2.IPROM_NO = V2.IPROM_NO
+		          WHERE PR2.ILAW_ID = #{lawId}
+		            AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		            AND ( V2.SFLAG IS NULL OR V2.SFLAG = 'PROMULGATION' )
+		          GROUP BY V2.ICTNS_ID ) MX
+		       ON MX.ICTNS_ID = V.ICTNS_ID AND PR.ILAW_NO = MX.LAW_NO
+		  LEFT OUTER JOIN TB_ATTACH A ON A.IATT_NO = F.IATT_NO
+		 WHERE PR.ILAW_ID = #{lawId}
+		   AND ( V.SFLAG IS NULL OR V.SFLAG = 'PROMULGATION' )
+		   AND F.SDEL_YN  = 'N'
+		   AND F.SVIEW_YN = 'Y'
+		   AND F.SCATE IN ('REL_FILE_1', 'REL_FILE_2', 'REL_FILE_3')
+		   AND ( ( PR.ILAW_NO = #{lawNo} AND NVL(V.SVRSN_YN, 'N') = 'N' )
+		      OR V.SVRSN_YN = 'Y' )
+		 ORDER BY CASE WHEN V.IRVCATE_NM = '본문' THEN 1
+		               WHEN V.IRVCATE_NM = '붙임' THEN 2
+		               WHEN V.IRVCATE_NM = '양식' THEN 3
+		               ELSE 4 END,
+		          V.ISEQ, V.IRVRSN_NO, F.IRFILE_NO
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelFileVO">
+		INSERT INTO TB_REL_FILE (
+			IRFILE_NO, IRVRSN_NO, IATT_NO, SCATE, STITLE, SDEL_YN,
+			SINS_DT, SVIEW_YN, SVIEW_CMPLT_YN
+		) VALUES (
+			#{relFileNo},
+			#{relVrsnNo},
+			#{attNo,jdbcType=NUMERIC},
+			NVL(#{cate,jdbcType=VARCHAR}, 'REL_FILE_1'),
+			#{title,jdbcType=VARCHAR},
+			#{delYn,jdbcType=VARCHAR},
+			#{insDt,jdbcType=VARCHAR},
+			#{viewYn,jdbcType=VARCHAR},
+			#{viewCmpltYn,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelFileVO">
+		UPDATE TB_REL_FILE
+		   SET STITLE         = #{title,jdbcType=VARCHAR},
+		       SCATE          = #{cate,jdbcType=VARCHAR},
+		       SVIEW_YN       = #{viewYn,jdbcType=VARCHAR},
+		       SVIEW_CMPLT_YN = #{viewCmpltYn,jdbcType=VARCHAR}
+		 WHERE IRFILE_NO = #{relFileNo}
+	</update>
+
+	<update id="softDelete">
+		UPDATE TB_REL_FILE SET SDEL_YN = 'Y' WHERE IRFILE_NO = #{relFileNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_FILE WHERE IRFILE_NO = #{relFileNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_FILE WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+</mapper>

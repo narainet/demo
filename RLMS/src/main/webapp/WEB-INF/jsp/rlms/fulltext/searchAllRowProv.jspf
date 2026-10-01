@@ -1,0 +1,42 @@
+<%-- 통합검색 행: 조문 (searchAll.jsp 전용 static include — 변수 row)
+     src=BODY(Oracle Text 본문 히트, item/subItem 로 #jo- 앵커) / TITLE(레거시 제목경로 — 본문이 파일형이라 앵커 없음) --%>
+<%@ page pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
+<%-- 조번호 앵커 — SITEM/SSUB_ITEM 은 제로패딩 VARCHAR2('001','00') → EL 산술(+0)로 숫자화
+     (뷰어 앵커는 jo-1 형식이라 jo-001 이면 점프 실패). 비숫자 값은 c:catch 로 앵커 생략. --%>
+<c:set var="usAnchor" value=""/>
+<c:set var="usItemNo" value=""/>
+<c:set var="usSubNo" value="0"/>
+<c:if test="${row.src eq 'BODY' and not empty row.item}">
+  <c:catch var="usAncErr">
+    <c:set var="usItemNo" value="${row.item + 0}"/>
+    <c:set var="usSubNo" value="${empty row.subItem ? 0 : row.subItem + 0}"/>
+    <c:set var="usAnchor" value="#jo-${usItemNo}"/>
+    <c:if test="${usSubNo > 0}"><c:set var="usAnchor" value="${usAnchor}-${usSubNo}"/></c:if>
+  </c:catch>
+  <c:if test="${not empty usAncErr}"><c:set var="usAnchor" value=""/><c:set var="usItemNo" value=""/></c:if>
+</c:if>
+<%-- hitTitle 이 60자 SFULL_ITEM 코드로 오는 구버전 SQL 방어 — 조번호로 대체(재기동 전 핫스왑 호환) --%>
+<c:set var="usProvTitle" value="${row.hitTitle}"/>
+<%-- 레거시 제목경로(SFULL_TITLE)는 HTML 엔티티 포함 저장 — c:out 이중 이스케이프 방지용 디코드(&amp; 마지막) --%>
+<c:if test="${row.src eq 'TITLE'}">
+  <c:set var="usProvTitle" value="${fn:replace(fn:replace(fn:replace(usProvTitle, '&lt;', '<'), '&gt;', '>'), '&amp;', '&')}"/>
+</c:if>
+<c:if test="${row.src eq 'BODY' and fn:length(row.hitTitle) == 60 and not empty usItemNo}">
+  <c:set var="usProvTitle" value="제${usItemNo}조"/>
+  <c:if test="${usSubNo > 0}"><c:set var="usProvTitle" value="${usProvTitle}의${usSubNo}"/></c:if>
+</c:if>
+<div class="us-item">
+  <div class="t">
+    <a href="<c:url value='/rlms/fulltext/provisionList.do'/>?promNo=${row.promNo}${usAnchor}"><c:out value="${usProvTitle}"/></a>
+  </div>
+  <c:if test="${not empty row.snippet}">
+    <div class="snip"><c:out value="${row.snippet}"/>&#8230;</div>
+  </c:if>
+  <div class="meta">
+    <c:out value="${row.promTitle}"/>
+    <c:if test="${row.src eq 'BODY'}"> · 본문 일치</c:if>
+    <c:if test="${row.src eq 'TITLE'}"> · 조문 제목 일치</c:if>
+  </div>
+</div>

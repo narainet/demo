@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+	<!-- 우편번호 모듈 폐기 후 유일한 사용처는 EgovMenuManageServiceImpl 의 메뉴/프로그램 일괄등록(loadWorkbook).
+	     loadWorkbook 은 mapClass 를 참조하지 않으므로 mapClass 미설정. -->
+	<bean id="excelZipService" class="org.egovframe.rte.fdl.excel.impl.EgovExcelServiceImpl">
+		<property name="sqlSessionTemplate" ref="egov.sqlSessionTemplate" />
+	</bean>
+
+</beans>

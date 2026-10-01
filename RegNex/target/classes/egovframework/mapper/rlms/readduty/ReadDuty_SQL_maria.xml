@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/readduty/ReadDuty_SQL_maria.xml
+
+  필수 열람(의무 숙지) — TB_READ_DUTY / TB_READ_DUTY_TGT / TB_READ_DUTY_CHK.
+   · 대상 판정: 전사(SALL_YN='Y', USR 직원만) 또는 대상 행(DEPT=ORGNZT_ID / USER=ESNTL_ID) 매칭.
+   · 확인 2단계: SREAD_DT(뷰어 열람 자동) / SCONF_DT(숙지 버튼, 최종 증빙) MERGE 멱등 기록.
+   · 스냅샷(SUSER_NM/SORGNZT_ID)은 최초 기록 시점 고정, 집계/매트릭스는 현재 사용자 마스터 기준.
+-->
+<mapper namespace="narainet.rlms.readduty.mapper.ReadDutyMapper">
+
+	<!-- 대상 판정 조각 - TB_READ_DUTY d 별칭 전제. 전사는 직원(USR)만, GNR 은 개인 지정으로만 포함 -->
+	<sql id="dutyTargetMatch">
+		( ( d.SALL_YN = 'Y' AND #{userSe} = 'USR' )
+		  OR EXISTS ( SELECT 1 FROM TB_READ_DUTY_TGT t
+		               WHERE t.IDUTY_NO = d.IDUTY_NO
+		                 AND ( ( t.STGT_TY = 'DEPT' AND t.STGT_ID = #{orgnztId} )
+		                    OR ( t.STGT_TY = 'USER' AND t.STGT_ID = #{esntlId} ) ) ) )
+	</sql>
+
+	<!-- 대상자 전개 WHERE 조각 - COMVNUSERMASTER u 별칭 전제, #{dutyNo} 사용 -->
+	<sql id="dutyUserExpandWhere">
+		( ( EXISTS ( SELECT 1 FROM TB_READ_DUTY d0
+		              WHERE d0.IDUTY_NO = #{dutyNo} AND d0.SALL_YN = 'Y' )
+		    AND u.USER_SE = 'USR' )
+		  OR EXISTS ( SELECT 1 FROM TB_READ_DUTY_TGT t
+		               WHERE t.IDUTY_NO = #{dutyNo}
+		                 AND ( ( t.STGT_TY = 'DEPT' AND t.STGT_ID = u.ORGNZT_ID )
+		                    OR ( t.STGT_TY = 'USER' AND t.STGT_ID = u.ESNTL_ID ) ) ) )
+	</sql>
+
+	<select id="selectDutyByPromNo" resultType="narainet.rlms.readduty.service.ReadDutyVO">
+		SELECT d.IDUTY_NO "dutyNo", d.ILAW_ID "lawId", d.IPROM_NO "promNo",
+		       d.SALL_YN "allYn", d.SDUE_DT "dueDt",
+		       d.SINS_ID "insId", d.SINS_NM "insNm", d.SINS_DT "insDt"
+		  FROM TB_READ_DUTY d
+		 WHERE d.IPROM_NO = #{promNo}
+	</select>
+
+	<select id="selectDutyTgts" resultType="narainet.rlms.readduty.service.ReadDutyTgtVO">
+		SELECT t.STGT_TY "tgtTy", t.STGT_ID "tgtId",
+		       CASE WHEN t.STGT_TY = 'DEPT'
+		            THEN NVL((SELECT o.ORGNZT_NM FROM COMTNORGNZTINFO o WHERE o.ORGNZT_ID = t.STGT_ID), t.STGT_ID)
+		            ELSE NVL((SELECT MAX(u.USER_NM || ' (' || u.USER_ID || ')')
+		                        FROM COMVNUSERMASTER u WHERE u.ESNTL_ID = t.STGT_ID), t.STGT_ID) END "tgtNm"
+		  FROM TB_READ_DUTY_TGT t
+		 WHERE t.IDUTY_NO = #{dutyNo}
+		 ORDER BY t.STGT_TY, 3
+	</select>
+
+	<!-- ILAW_ID 는 회차에서 파생 - 지정 시점 회차의 법령을 그대로 따른다 (favor ISEEN_LAW_NO 선례) -->
+	<insert id="insertDuty" parameterType="narainet.rlms.readduty.service.ReadDutyVO">
+		INSERT INTO TB_READ_DUTY (
+			IDUTY_NO, ILAW_ID, IPROM_NO, SALL_YN, SDUE_DT, SINS_ID, SINS_NM, SINS_DT
+		) VALUES (
+			#{dutyNo},
+			(SELECT p.ILAW_ID FROM TB_PROM p WHERE p.IPROM_NO = #{promNo}),
+			#{promNo}, #{allYn}, #{dueDt},
+			#{insId}, #{insNm},
+			TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS')
+		)
+	</insert>
+
+	<!-- 재지정 - 마지막 지정자/일시로 갱신. 확인 기록(CHK)은 보존(이미 읽은 증빙 유지) -->
+	<update id="updateDuty" parameterType="narainet.rlms.readduty.service.ReadDutyVO">
+		UPDATE TB_READ_DUTY
+		   SET SALL_YN = #{allYn},
+		       SDUE_DT = #{dueDt},
+		       SINS_ID = #{insId},
+		       SINS_NM = #{insNm},
+		       SINS_DT = TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS')
+		 WHERE IDUTY_NO = #{dutyNo}
+	</update>
+
+	<delete id="deleteDuty">
+		DELETE FROM TB_READ_DUTY WHERE IDUTY_NO = #{dutyNo}
+	</delete>
+
+	<delete id="deleteDutyTgts">
+		DELETE FROM TB_READ_DUTY_TGT WHERE IDUTY_NO = #{dutyNo}
+	</delete>
+
+	<delete id="deleteDutyChks">
+		DELETE FROM TB_READ_DUTY_CHK WHERE IDUTY_NO = #{dutyNo}
+	</delete>
+
+	<insert id="insertDutyTgt">
+		INSERT INTO TB_READ_DUTY_TGT (IDUTY_NO, STGT_TY, STGT_ID)
+		VALUES (#{dutyNo}, #{tgtTy}, #{tgtId})
+	</insert>
+
+	<select id="countDutyTarget" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_READ_DUTY d
+		 WHERE d.IDUTY_NO = #{dutyNo}
+		   AND <include refid="dutyTargetMatch"/>
+	</select>
+
+	<!-- 홈 카드 "읽어야 할 규정" top N - 미숙지(SCONF_DT NULL)만, 기한 임박순(무기한은 후순위) -->
+	<select id="selectMyDuties" resultType="map">
+		SELECT * FROM (
+			SELECT d.IDUTY_NO "dutyNo", d.IPROM_NO "promNo",
+			       p.STITLE "title", p.SPROM_DT "promDate",
+			       d.SDUE_DT "dueDt",
+			       CASE WHEN d.SDUE_DT IS NOT NULL
+			            THEN DATEDIFF(STR_TO_DATE(d.SDUE_DT, '%Y%m%d'), DATE(SYSDATE())) END "dday"<!-- Oracle DATE-DATE=일수 → DATEDIFF -->,
+			       c.SREAD_DT "readDt",
+			       CASE WHEN p.SSTART_DT <![CDATA[ > ]]> TO_CHAR(SYSDATE(), 'YYYY-MM-DD') THEN 'Y' ELSE 'N' END "pendingYn"
+			  FROM TB_READ_DUTY d
+			  JOIN TB_PROM p ON p.IPROM_NO = d.IPROM_NO AND p.SDISP_YN = 'Y'
+			  LEFT OUTER JOIN TB_READ_DUTY_CHK c
+			    ON c.IDUTY_NO = d.IDUTY_NO AND c.SUSER_ID = #{esntlId}
+			 WHERE c.SCONF_DT IS NULL
+			   AND <include refid="dutyTargetMatch"/>
+			 ORDER BY CASE WHEN d.SDUE_DT IS NULL THEN 1 ELSE 0 END, d.SDUE_DT ASC, d.SINS_DT DESC
+		) X LIMIT #{n}
+	</select>
+
+	<!-- 뷰어 버튼 상태 - 이 회차 지정의 내 상태 1행 (대상 아니면 0행) -->
+	<select id="selectMyDutyForProm" resultType="map">
+		SELECT d.IDUTY_NO "dutyNo", d.SDUE_DT "dueDt",
+		       CASE WHEN d.SDUE_DT IS NOT NULL
+		            THEN DATEDIFF(STR_TO_DATE(d.SDUE_DT, '%Y%m%d'), DATE(SYSDATE())) END "dday"<!-- Oracle DATE-DATE=일수 → DATEDIFF -->,
+		       c.SREAD_DT "readDt", c.SCONF_DT "confDt",
+		       CASE WHEN c.SCONF_DT IS NOT NULL
+		            THEN SUBSTR(c.SCONF_DT, 1, 4) || '-' || SUBSTR(c.SCONF_DT, 5, 2) || '-' ||
+		                 SUBSTR(c.SCONF_DT, 7, 2) || ' ' || SUBSTR(c.SCONF_DT, 9, 2) || ':' ||
+		                 SUBSTR(c.SCONF_DT, 11, 2) END "confDtFmt"
+		  FROM TB_READ_DUTY d
+		  LEFT OUTER JOIN TB_READ_DUTY_CHK c
+		    ON c.IDUTY_NO = d.IDUTY_NO AND c.SUSER_ID = #{esntlId}
+		 WHERE d.IPROM_NO = #{promNo}
+		   AND <include refid="dutyTargetMatch"/>
+	</select>
+
+	<!-- 열람 자동 기록(1단계) - 최초 1회만(NVL), 스냅샷은 최초 기록 시점 고정. 멱등 -->
+	<update id="touchRead">
+		<!-- Oracle MERGE → ON DUPLICATE KEY UPDATE (PK = IDUTY_NO+SUSER_ID). 우변 컬럼참조 = 기존 행 값 -->
+		INSERT INTO TB_READ_DUTY_CHK (IDUTY_NO, SUSER_ID, SUSER_NM, SORGNZT_ID, SREAD_DT)
+		VALUES (#{dutyNo}, #{esntlId}, #{userNm}, #{orgnztId}, TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS'))
+		ON DUPLICATE KEY UPDATE SREAD_DT = NVL(SREAD_DT, TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS'))
+	</update>
+
+	<!-- 숙지 확인(2단계, 최종 증빙) - SREAD_DT 도 방어적 보정(열람 기록 없이 숙지만 오는 경우) -->
+	<update id="confirmRead">
+		INSERT INTO TB_READ_DUTY_CHK (IDUTY_NO, SUSER_ID, SUSER_NM, SORGNZT_ID, SREAD_DT, SCONF_DT)
+		VALUES (#{dutyNo}, #{esntlId}, #{userNm}, #{orgnztId},
+		        TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS'), TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS'))
+		ON DUPLICATE KEY UPDATE
+			SCONF_DT = NVL(SCONF_DT, TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS')),
+			SREAD_DT = NVL(SREAD_DT, TO_CHAR(SYSDATE(), 'YYYYMMDDHH24MISS'))
+	</update>
+
+	<!-- 지정건 목록 + 집계 - 대상 전개를 집합 1회 GROUP BY 로 (행별 스칼라 전개 회피) -->
+	<select id="selectDutyStatList" resultType="map">
+		SELECT * FROM (
+			SELECT d.IDUTY_NO "dutyNo", d.IPROM_NO "promNo", d.ILAW_ID "lawId",
+			       p.STITLE "title", p.SPROM_DT "promDate",
+			       d.SALL_YN "allYn", d.SDUE_DT "dueDt",
+			       d.SINS_NM "insNm", SUBSTR(d.SINS_DT, 1, 8) "insDt",
+			       NVL(x.TGT_CNT, 0) "tgtCnt", NVL(x.READ_CNT, 0) "readCnt", NVL(x.CONF_CNT, 0) "confCnt",
+			       CASE WHEN d.SDUE_DT IS NOT NULL
+			            THEN DATEDIFF(STR_TO_DATE(d.SDUE_DT, '%Y%m%d'), DATE(SYSDATE())) END "dday"<!-- Oracle DATE-DATE=일수 → DATEDIFF -->
+			  FROM TB_READ_DUTY d
+			  JOIN TB_PROM p ON p.IPROM_NO = d.IPROM_NO
+			  LEFT OUTER JOIN (
+					SELECT dd.IDUTY_NO,
+					       COUNT(u.ESNTL_ID) TGT_CNT,
+					       COUNT(c.SREAD_DT) READ_CNT,
+					       COUNT(c.SCONF_DT) CONF_CNT
+					  FROM TB_READ_DUTY dd
+					  JOIN COMVNUSERMASTER u
+					    ON ( ( dd.SALL_YN = 'Y' AND u.USER_SE = 'USR' )
+					      OR EXISTS ( SELECT 1 FROM TB_READ_DUTY_TGT t
+					                   WHERE t.IDUTY_NO = dd.IDUTY_NO
+					                     AND ( ( t.STGT_TY = 'DEPT' AND t.STGT_ID = u.ORGNZT_ID )
+					                        OR ( t.STGT_TY = 'USER' AND t.STGT_ID = u.ESNTL_ID ) ) ) )
+					  LEFT OUTER JOIN TB_READ_DUTY_CHK c
+					    ON c.IDUTY_NO = dd.IDUTY_NO AND c.SUSER_ID = u.ESNTL_ID
+					 GROUP BY dd.IDUTY_NO
+			  ) x ON x.IDUTY_NO = d.IDUTY_NO
+			 WHERE 1 = 1
+			<if test='keyword != null and keyword != ""'>
+			   AND p.STITLE LIKE '%' || #{keyword} || '%'
+			</if>
+			 ORDER BY d.SINS_DT DESC, d.IDUTY_NO DESC
+		) X <![CDATA[ LIMIT 500 ]]>
+	</select>
+
+	<!-- 지정건 헤더 요약 - 상세(매트릭스) 상단 -->
+	<select id="selectDutySummary" resultType="map">
+		SELECT d.IDUTY_NO "dutyNo", d.IPROM_NO "promNo", d.ILAW_ID "lawId",
+		       p.STITLE "title", p.SPROM_DT "promDate",
+		       d.SALL_YN "allYn", d.SDUE_DT "dueDt",
+		       d.SINS_NM "insNm", SUBSTR(d.SINS_DT, 1, 8) "insDt",
+		       CASE WHEN d.SDUE_DT IS NOT NULL
+		            THEN DATEDIFF(STR_TO_DATE(d.SDUE_DT, '%Y%m%d'), DATE(SYSDATE())) END "dday"<!-- Oracle DATE-DATE=일수 → DATEDIFF -->
+		  FROM TB_READ_DUTY d
+		  JOIN TB_PROM p ON p.IPROM_NO = d.IPROM_NO
+		 WHERE d.IDUTY_NO = #{dutyNo}
+	</select>
+
+	<!-- 대상자 개인 매트릭스 - 현재 사용자 마스터 기준 전개, 확인 기록 LEFT JOIN -->
+	<select id="selectDutyUserMatrix" resultType="map">
+		SELECT u.ESNTL_ID "esntlId", u.USER_ID "userId", u.USER_NM "userNm",
+		       NVL(o.ORGNZT_NM, '(부서 미지정)') "orgnztNm",
+		       c.SREAD_DT "readDt", c.SCONF_DT "confDt",
+		       CASE WHEN c.SREAD_DT IS NOT NULL
+		            THEN SUBSTR(c.SREAD_DT, 1, 4) || '-' || SUBSTR(c.SREAD_DT, 5, 2) || '-' ||
+		                 SUBSTR(c.SREAD_DT, 7, 2) || ' ' || SUBSTR(c.SREAD_DT, 9, 2) || ':' ||
+		                 SUBSTR(c.SREAD_DT, 11, 2) END "readDtFmt",
+		       CASE WHEN c.SCONF_DT IS NOT NULL
+		            THEN SUBSTR(c.SCONF_DT, 1, 4) || '-' || SUBSTR(c.SCONF_DT, 5, 2) || '-' ||
+		                 SUBSTR(c.SCONF_DT, 7, 2) || ' ' || SUBSTR(c.SCONF_DT, 9, 2) || ':' ||
+		                 SUBSTR(c.SCONF_DT, 11, 2) END "confDtFmt"
+		  FROM COMVNUSERMASTER u
+		  LEFT OUTER JOIN COMTNORGNZTINFO o ON o.ORGNZT_ID = u.ORGNZT_ID
+		  LEFT OUTER JOIN TB_READ_DUTY_CHK c
+		    ON c.IDUTY_NO = #{dutyNo} AND c.SUSER_ID = u.ESNTL_ID
+		 WHERE <include refid="dutyUserExpandWhere"/>
+		 ORDER BY 4, u.USER_NM, u.USER_ID
+	</select>
+
+	<!-- 개인 대상 지정용 사용자 검색 - 이름/아이디 부분일치 top 20 (CateReader 패턴) -->
+	<select id="selectUserSearch" resultType="java.util.LinkedHashMap">
+		SELECT * FROM (
+			SELECT u.ESNTL_ID AS "esntlId", u.USER_ID AS "userId", u.USER_NM AS "userNm",
+			       (SELECT g.ORGNZT_NM FROM COMTNORGNZTINFO g WHERE g.ORGNZT_ID = u.ORGNZT_ID) AS "orgnztNm"
+			  FROM COMVNUSERMASTER u
+			 WHERE UPPER(u.USER_NM) LIKE '%' || UPPER(#{keyword}) || '%'
+			    OR UPPER(u.USER_ID) LIKE '%' || UPPER(#{keyword}) || '%'
+			 ORDER BY u.USER_NM, u.USER_ID
+		) X <![CDATA[ LIMIT 20 ]]>
+	</select>
+
+	<!-- 부서별 집계 -->
+	<select id="selectDutyDeptSummary" resultType="map">
+		SELECT NVL(o.ORGNZT_NM, '(부서 미지정)') "orgnztNm",
+		       COUNT(*) "tgtCnt",
+		       COUNT(c.SREAD_DT) "readCnt",
+		       COUNT(c.SCONF_DT) "confCnt"
+		  FROM COMVNUSERMASTER u
+		  LEFT OUTER JOIN COMTNORGNZTINFO o ON o.ORGNZT_ID = u.ORGNZT_ID
+		  LEFT OUTER JOIN TB_READ_DUTY_CHK c
+		    ON c.IDUTY_NO = #{dutyNo} AND c.SUSER_ID = u.ESNTL_ID
+		 WHERE <include refid="dutyUserExpandWhere"/>
+		 GROUP BY NVL(o.ORGNZT_NM, '(부서 미지정)')
+		 ORDER BY 1
+	</select>
+
+</mapper>

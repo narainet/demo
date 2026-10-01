@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/common/Law_Main_SQL_maria.xml
+  LexPortal(송무관리 단독) 진입점 보조 조회 — 부서 목록(통합본 Prom_SQL selectOrgnztList 계약 승계).
+-->
+<mapper namespace="narainet.law.common.mapper.LawMainMapper">
+
+	<select id="selectBuseoList" resultType="java.util.LinkedHashMap">
+		SELECT TRIM(o.ORGNZT_ID)             AS "orgnztId",
+		       o.ORGNZT_NM                   AS "buseoNm",
+		       NVL(o.ORGNZT_DC, o.ORGNZT_NM) AS "fullNm",
+		       CASE WHEN (o.ORGNZT_ID REGEXP '^ORG_[0-9]{16}$')
+		            THEN CAST(SUBSTR(o.ORGNZT_ID, 5) AS UNSIGNED) END AS "buseoNo"
+		  FROM COMTNORGNZTINFO o
+		<if test="keyword != null and keyword != ''">
+		 WHERE UPPER(o.ORGNZT_NM) LIKE '%' || UPPER(#{keyword}) || '%'
+		</if>
+		 ORDER BY o.ORGNZT_NM
+	</select>
+
+</mapper>

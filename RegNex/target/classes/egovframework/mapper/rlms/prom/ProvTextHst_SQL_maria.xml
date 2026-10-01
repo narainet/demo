@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/prom/ProvTextHst_SQL_maria.xml
+
+  회차 본문 일괄편집 이력 (TB_PROV_TEXT_HST) MyBatis 매핑.
+  레거시 "이전개정작업내용" 드롭다운 + 불러오기/삭제 의 DAO.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.prom.mapper.ProvTextHstMapper">
+
+	<resultMap id="provTextHstResult" type="narainet.rlms.prom.service.ProvTextHstVO">
+		<result property="provTextHstNo" column="IPTHST_NO"/>
+		<result property="promNo"        column="IPROM_NO"/>
+		<result property="userId"        column="SUSER_ID"/>
+		<result property="text"          column="STEXT"  jdbcType="CLOB"/>
+		<result property="insDt"         column="SINS_DT"/>
+	</resultMap>
+
+	<!-- 최신 30건 (드롭다운용) — STEXT 제외(목록은 가벼워야) -->
+	<select id="selectHistoryByPromNo" resultMap="provTextHstResult">
+		SELECT * FROM (
+			SELECT IPTHST_NO, IPROM_NO, SUSER_ID, NULL AS STEXT, SINS_DT
+			  FROM TB_PROV_TEXT_HST
+			 WHERE IPROM_NO = #{promNo}
+			 ORDER BY SINS_DT DESC, IPTHST_NO DESC
+		) X LIMIT 30
+	</select>
+
+	<select id="selectHistoryByNo" resultMap="provTextHstResult">
+		SELECT IPTHST_NO, IPROM_NO, SUSER_ID, STEXT, SINS_DT
+		  FROM TB_PROV_TEXT_HST
+		 WHERE IPTHST_NO = #{provTextHstNo}
+	</select>
+
+	<insert id="insertHistory" parameterType="narainet.rlms.prom.service.ProvTextHstVO">
+		INSERT INTO TB_PROV_TEXT_HST (
+			IPTHST_NO, IPROM_NO, SUSER_ID, STEXT, SINS_DT
+		) VALUES (
+			#{provTextHstNo}, #{promNo}, #{userId}, #{text,jdbcType=CLOB},
+			TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS')
+		)
+	</insert>
+
+	<delete id="deleteHistory">
+		DELETE FROM TB_PROV_TEXT_HST WHERE IPTHST_NO = #{provTextHstNo}
+	</delete>
+
+	<!-- 회차 삭제 동반 정리 — TB_PROM 트리거 cascade 미대상이라 앱(deleteProm)이 명시 호출 -->
+	<delete id="deleteHistoryByPromNo">
+		DELETE FROM TB_PROV_TEXT_HST WHERE IPROM_NO = #{promNo}
+	</delete>
+
+</mapper>

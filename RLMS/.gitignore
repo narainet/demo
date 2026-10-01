@@ -1,0 +1,41 @@
+# Build
+/target/
+/build/
+*.class
+*.jar
+*.war
+
+# Eclipse / IntelliJ / VS Code
+/.settings/
+.classpath
+.project
+.factorypath
+.springBeans
+*.iml
+.idea/
+.vscode/
+
+# Claude Code 작업 디렉터리 (메모리/세션 — 코드 아님)
+/.claude/
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/logs/
+
+# Lombok
+/lombok.config
+
+# 대용량 원본 LIMADM 덤프 (1.1GB — git 부적합, 별도 보관)
+/database/원본_LIMADM.sql
+
+# SVN 잔재 (git 으로 이관 — 추적 제거)
+.svn/

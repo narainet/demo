@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/gaejung/Gaejung_SQL_oracle.xml
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.gaejung.mapper.GaejungMapper">
+
+	<resultMap id="gaejungResult" type="narainet.rlms.gaejung.service.GaejungVO">
+		<result property="gaejungNo" column="IGAEJUNG_NO"/>
+		<result property="gaejungNm" column="SNAME"/>
+		<result property="seq"       column="ISEQ"/>
+		<result property="diffYn"    column="SDIFF_YN"/>
+		<result property="delYn"     column="SDEL_YN"/>
+		<result property="insDt"     column="SINS_DT"/>
+	</resultMap>
+
+	<select id="selectGaejungList" parameterType="narainet.rlms.gaejung.service.GaejungVO"
+			resultMap="gaejungResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			<!-- 등록일시는 화면에 분까지만 — 원본(초까지)은 그대로 둔다 (2026-07-31) -->
+			SELECT IGAEJUNG_NO, SNAME, ISEQ, SDIFF_YN, SDEL_YN, SUBSTR(SINS_DT, 1, 16) AS SINS_DT
+			  FROM TB_GAEJUNG
+			 WHERE SDEL_YN = 'N'
+			<if test="searchKeyword != null and searchKeyword != ''">
+			   AND UPPER(SNAME) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+			</if>
+			 ORDER BY ISEQ, IGAEJUNG_NO
+		) TB ) WHERE rn BETWEEN #{firstIndex}+1 AND #{firstIndex}+#{recordCountPerPage}
+	</select>
+
+	<select id="selectGaejungListCnt" parameterType="narainet.rlms.gaejung.service.GaejungVO"
+			resultType="int">
+		SELECT COUNT(*) FROM TB_GAEJUNG
+		 WHERE SDEL_YN = 'N'
+		<if test="searchKeyword != null and searchKeyword != ''">
+		   AND UPPER(SNAME) LIKE '%' || UPPER(#{searchKeyword}) || '%'
+		</if>
+	</select>
+
+	<select id="selectAllActive" resultMap="gaejungResult">
+		SELECT IGAEJUNG_NO, SNAME, ISEQ, SDIFF_YN, SDEL_YN, SINS_DT
+		  FROM TB_GAEJUNG
+		 WHERE SDEL_YN = 'N'
+		 ORDER BY ISEQ, IGAEJUNG_NO
+	</select>
+
+	<select id="selectGaejungByNo" resultMap="gaejungResult">
+		SELECT IGAEJUNG_NO, SNAME, ISEQ, SDIFF_YN, SDEL_YN, SINS_DT
+		  FROM TB_GAEJUNG WHERE IGAEJUNG_NO = #{gaejungNo}
+	</select>
+
+	<select id="selectGaejungByName" resultMap="gaejungResult">
+		SELECT IGAEJUNG_NO, SNAME, ISEQ, SDIFF_YN, SDEL_YN, SINS_DT
+		  FROM TB_GAEJUNG WHERE SNAME = #{gaejungNm}
+	</select>
+
+	<select id="selectMaxSeq" resultType="int">
+		SELECT NVL(MAX(ISEQ), 0) + 1 FROM TB_GAEJUNG WHERE SDEL_YN = 'N'
+	</select>
+
+	<select id="selectPromCntByGaejung" resultType="int">
+		SELECT COUNT(*) FROM TB_PROM
+		 WHERE IGAEJUNG_NO   = #{gaejungNo}
+		   AND SEXISTING_YN = 'Y'
+	</select>
+
+	<insert id="insertGaejung" parameterType="narainet.rlms.gaejung.service.GaejungVO">
+		INSERT INTO TB_GAEJUNG (IGAEJUNG_NO, SNAME, ISEQ, SDIFF_YN, SDEL_YN, SINS_DT)
+		VALUES (#{gaejungNo}, #{gaejungNm}, #{seq}, #{diffYn}, 'N',
+		        TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'))
+	</insert>
+
+	<update id="updateGaejung" parameterType="narainet.rlms.gaejung.service.GaejungVO">
+		UPDATE TB_GAEJUNG SET
+			SNAME    = #{gaejungNm},
+			ISEQ     = #{seq},
+			SDIFF_YN = #{diffYn},
+			SDEL_YN  = #{delYn}
+		WHERE IGAEJUNG_NO = #{gaejungNo}
+	</update>
+
+	<update id="updateGaejungDeleted">
+		UPDATE TB_GAEJUNG SET SDEL_YN = 'Y' WHERE IGAEJUNG_NO = #{gaejungNo}
+	</update>
+
+</mapper>

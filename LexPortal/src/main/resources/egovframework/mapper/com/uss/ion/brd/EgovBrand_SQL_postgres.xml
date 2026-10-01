@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    브랜드설정(로고·파비콘) — COM_BRAND 는 BRAND_ID='S' 단일 행이다.
+    행이 없어도 화면이 뜨도록 조회는 null 을 허용하고, 저장은 없으면 INSERT / 있으면 UPDATE 한다.
+-->
+<mapper namespace="brandDAO">
+
+    <resultMap id="brand" type="egovframework.com.uss.ion.brd.service.Brand">
+        <result property="brandId"           column="BRAND_ID"/>
+        <result property="logoTyCode"        column="LOGO_TY_CODE"/>
+        <result property="logoText"          column="LOGO_TEXT"/>
+        <result property="logoAtchFileId"    column="LOGO_ATCH_FILE_ID"/>
+        <result property="faviconAtchFileId" column="FAVICON_ATCH_FILE_ID"/>
+        <result property="cntcAdres"         column="CNTC_ADRES"/>
+        <result property="cntcTelno"         column="CNTC_TELNO"/>
+        <result property="cntcFxnum"         column="CNTC_FXNUM"/>
+        <result property="cntcEmailAdres"    column="CNTC_EMAIL_ADRES"/>
+        <result property="lastUpdusrId"      column="LAST_UPDUSR_ID"/>
+        <result property="lastUpdtPnttm"     column="LAST_UPDT_PNTTM"/>
+    </resultMap>
+
+    <select id="selectBrand" resultMap="brand">
+            SELECT BRAND_ID,
+                   LOGO_TY_CODE,
+                   LOGO_TEXT,
+                   RTRIM(LOGO_ATCH_FILE_ID)    AS LOGO_ATCH_FILE_ID,
+                   RTRIM(FAVICON_ATCH_FILE_ID) AS FAVICON_ATCH_FILE_ID,
+                   CNTC_ADRES,
+                   CNTC_TELNO,
+                   CNTC_FXNUM,
+                   CNTC_EMAIL_ADRES,
+                   LAST_UPDUSR_ID,
+                   TO_CHAR(LAST_UPDT_PNTTM, 'YYYY-MM-DD HH24:MI:SS') AS LAST_UPDT_PNTTM
+              FROM COM_BRAND
+             WHERE BRAND_ID = 'S'
+    </select>
+
+    <!-- 첨부ID 는 이번에 새로 올린 것이 있을 때만 바꾼다 — 빈 값으로 덮어써 기존 로고가 사라지는 것 방지 -->
+    <update id="updateBrand" parameterType="egovframework.com.uss.ion.brd.service.Brand">
+            UPDATE COM_BRAND
+               SET LOGO_TY_CODE = #{logoTyCode},
+                   LOGO_TEXT    = #{logoText},
+                   <if test="logoAtchFileId != null and logoAtchFileId != ''">
+                   LOGO_ATCH_FILE_ID = #{logoAtchFileId},
+                   </if>
+                   <if test="faviconAtchFileId != null and faviconAtchFileId != ''">
+                   FAVICON_ATCH_FILE_ID = #{faviconAtchFileId},
+                   </if>
+                   CNTC_ADRES       = #{cntcAdres},
+                   CNTC_TELNO       = #{cntcTelno},
+                   CNTC_FXNUM       = #{cntcFxnum},
+                   CNTC_EMAIL_ADRES = #{cntcEmailAdres},
+                   LAST_UPDUSR_ID  = #{lastUpdusrId},
+                   LAST_UPDT_PNTTM = LOCALTIMESTAMP
+             WHERE BRAND_ID = 'S'
+    </update>
+
+    <insert id="insertBrand" parameterType="egovframework.com.uss.ion.brd.service.Brand">
+            INSERT INTO COM_BRAND
+                   (BRAND_ID, LOGO_TY_CODE, LOGO_TEXT,
+                    LOGO_ATCH_FILE_ID, FAVICON_ATCH_FILE_ID,
+                    CNTC_ADRES, CNTC_TELNO, CNTC_FXNUM, CNTC_EMAIL_ADRES,
+                    LAST_UPDUSR_ID, LAST_UPDT_PNTTM)
+            VALUES ('S', #{logoTyCode}, #{logoText},
+                    #{logoAtchFileId,jdbcType=CHAR}, #{faviconAtchFileId,jdbcType=CHAR},
+                    #{cntcAdres}, #{cntcTelno}, #{cntcFxnum}, #{cntcEmailAdres},
+                    #{lastUpdusrId}, LOCALTIMESTAMP)
+    </insert>
+
+    <!-- 이미지 서빙용 — 첨부ID 로 저장 경로/원본명/확장자를 찾는다(첫 파일 1건) -->
+    <select id="selectBrandFile" parameterType="string" resultType="egovframework.com.cmm.service.FileVO">
+            SELECT FILE_STRE_COURS AS "fileStreCours",
+                   STRE_FILE_NM    AS "streFileNm",
+                   ORIGNL_FILE_NM  AS "orignlFileNm",
+                   FILE_EXTSN      AS "fileExtsn",
+                   ATCH_FILE_ID    AS "atchFileId",
+                   FILE_SN         AS "fileSn"
+              FROM COMTNFILEDETAIL
+             WHERE ATCH_FILE_ID = #{atchFileId}
+               AND FILE_SN = ( SELECT MIN(FILE_SN) FROM COMTNFILEDETAIL WHERE ATCH_FILE_ID = #{atchFileId} )
+    </select>
+
+</mapper>

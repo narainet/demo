@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/assign/Law_Assign_SQL_postgres.xml
+  선임(LAW_SUIT_LAWYER) + 만족도(LAW_LAWYER_SATIS) — 목록은 변호사·사건·소송결과·만족도 집계 동봉(집합 1회). §7.6
+-->
+<mapper namespace="narainet.law.assign.mapper.LawAssignMapper">
+
+	<sql id="searchWhere">
+		<if test='searchKeyword != null and searchKeyword != ""'>
+		  AND (L.LAW_FIRM LIKE '%' || #{searchKeyword} || '%'
+		       OR L.LAWYER_NM LIKE '%' || #{searchKeyword} || '%'
+		       OR S.CASE_NO LIKE '%' || #{searchKeyword} || '%'
+		       OR S.CASE_NM LIKE '%' || #{searchKeyword} || '%')
+		</if>
+	</sql>
+
+	<sql id="assignCols">
+		SL.ASSIGN_ID    AS assignId,
+		SL.SUIT_ID      AS suitId,
+		SL.LAWYER_ID    AS lawyerId,
+		SL.ASSIGN_DT    AS assignDt,
+		SL.ATCH_FILE_ID AS atchFileId,
+		L.LAW_FIRM      AS lawFirm,
+		L.LAWYER_NM     AS lawyerNm,
+		S.CASE_NO       AS caseNo,
+		S.CASE_NM       AS caseNm,
+		COALESCE(S.RSLT_KIND_NM, RS.CODE_NM) AS rsltDispNm,
+		SA.AVG_SCORE    AS satisAvg,
+		COALESCE(SA.CNT, 0)  AS satisCnt
+	</sql>
+
+	<sql id="assignFrom">
+		FROM LAW_SUIT_LAWYER SL
+		JOIN LAW_LAWYER L ON L.LAWYER_ID = SL.LAWYER_ID
+		JOIN LAW_SUIT   S ON S.SUIT_ID   = SL.SUIT_ID AND S.DEL_YN = 'N'
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE RS ON RS.CODE_ID = 'LAW_RESULT' AND RS.CODE = S.RSLT_KIND_CD
+		LEFT OUTER JOIN (
+		      SELECT ASSIGN_ID, ROUND(AVG(SCORE), 1) AVG_SCORE, COUNT(*) CNT
+		        FROM LAW_LAWYER_SATIS
+		       GROUP BY ASSIGN_ID
+		     ) SA ON SA.ASSIGN_ID = SL.ASSIGN_ID
+	</sql>
+
+	<select id="selectAssignCnt" parameterType="narainet.law.assign.service.LawSuitLawyerVO" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT_LAWYER SL
+		  JOIN LAW_LAWYER L ON L.LAWYER_ID = SL.LAWYER_ID
+		  JOIN LAW_SUIT   S ON S.SUIT_ID   = SL.SUIT_ID AND S.DEL_YN = 'N'
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectAssignList" parameterType="narainet.law.assign.service.LawSuitLawyerVO"
+	        resultType="narainet.law.assign.service.LawSuitLawyerVO">
+		SELECT <include refid="assignCols"/>
+		                <include refid="assignFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="searchWhere"/>
+		                 ORDER BY SL.ASSIGN_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="selectAssignListBySuit" resultType="narainet.law.assign.service.LawSuitLawyerVO">
+		SELECT <include refid="assignCols"/>
+		<include refid="assignFrom"/>
+		 WHERE SL.SUIT_ID = #{suitId}
+		 ORDER BY SL.ASSIGN_ID DESC
+	</select>
+
+	<select id="selectAssign" resultType="narainet.law.assign.service.LawSuitLawyerVO">
+		SELECT SL.ASSIGN_ID    AS assignId,
+		       SL.SUIT_ID      AS suitId,
+		       SL.LAWYER_ID    AS lawyerId,
+		       SL.ASSIGN_DT    AS assignDt,
+		       SL.ATCH_FILE_ID AS atchFileId,
+		       L.LAW_FIRM      AS lawFirm,
+		       L.LAWYER_NM     AS lawyerNm,
+		       S.CASE_NO       AS caseNo,
+		       S.CASE_NM       AS caseNm
+		  FROM LAW_SUIT_LAWYER SL
+		  JOIN LAW_LAWYER L ON L.LAWYER_ID = SL.LAWYER_ID
+		  JOIN LAW_SUIT   S ON S.SUIT_ID   = SL.SUIT_ID
+		 WHERE SL.ASSIGN_ID = #{assignId}
+	</select>
+
+	<insert id="insertAssign" parameterType="narainet.law.assign.service.LawSuitLawyerVO">
+		INSERT INTO LAW_SUIT_LAWYER (
+			ASSIGN_ID, SUIT_ID, LAWYER_ID, ASSIGN_DT, ATCH_FILE_ID, REG_USER_ID, REG_DT
+		) VALUES (
+			#{assignId}, #{suitId}, #{lawyerId}, #{assignDt, jdbcType=VARCHAR},
+			#{atchFileId, jdbcType=CHAR}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateAssign" parameterType="narainet.law.assign.service.LawSuitLawyerVO">
+		UPDATE LAW_SUIT_LAWYER
+		   SET LAWYER_ID    = #{lawyerId},
+		       ASSIGN_DT    = #{assignDt, jdbcType=VARCHAR},
+		       ATCH_FILE_ID = #{atchFileId, jdbcType=CHAR},
+		       UPD_USER_ID  = #{updUserId},
+		       UPD_DT       = #{updDt}
+		 WHERE ASSIGN_ID = #{assignId}
+	</update>
+
+	<delete id="deleteAssign">
+		DELETE FROM LAW_SUIT_LAWYER WHERE ASSIGN_ID = #{assignId}
+	</delete>
+
+	<!-- ── 만족도(간이) — 선임 단위 1인 1회 MERGE ─────────── -->
+	<select id="selectSatisList" resultType="narainet.law.assign.service.LawLawyerSatisVO">
+		SELECT SA.ASSIGN_ID AS assignId,
+		       SA.EMPLYR_ID AS emplyrId,
+		       SA.SCORE     AS score,
+		       SA.OPINION   AS opinion,
+		       SA.REG_DT    AS regDt,
+		       SA.UPD_DT    AS updDt,
+		       E.USER_NM    AS evaluatorNm
+		  FROM LAW_LAWYER_SATIS SA
+		  LEFT OUTER JOIN COMTNEMPLYRINFO E ON E.EMPLYR_ID = SA.EMPLYR_ID
+		 WHERE SA.ASSIGN_ID = #{assignId}
+		 ORDER BY COALESCE(SA.UPD_DT, SA.REG_DT) DESC
+	</select>
+
+	<select id="selectMySatis" resultType="narainet.law.assign.service.LawLawyerSatisVO">
+		SELECT ASSIGN_ID AS assignId,
+		       EMPLYR_ID AS emplyrId,
+		       SCORE     AS score,
+		       OPINION   AS opinion
+		  FROM LAW_LAWYER_SATIS
+		 WHERE ASSIGN_ID = #{assignId}
+		   AND EMPLYR_ID = #{emplyrId}
+	</select>
+
+	<update id="mergeSatis" parameterType="narainet.law.assign.service.LawLawyerSatisVO">
+		<!-- PostgreSQL: Oracle MERGE → INSERT ... ON CONFLICT DO UPDATE
+		     (LAW_LAWYER_SATIS 의 PK 가 ASSIGN_ID+EMPLYR_ID 라 1인 1회 갱신 의미가 동일하다) -->
+		INSERT INTO LAW_LAWYER_SATIS (ASSIGN_ID, EMPLYR_ID, SCORE, OPINION, REG_DT)
+		VALUES (#{assignId}, #{emplyrId}, #{score}, #{opinion, jdbcType=VARCHAR},
+		        TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS'))
+		ON CONFLICT (ASSIGN_ID, EMPLYR_ID) DO UPDATE SET
+		        SCORE   = #{score},
+		        OPINION = #{opinion, jdbcType=VARCHAR},
+		        UPD_DT  = TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS')
+	</update>
+
+</mapper>

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/cate/CateOwner_SQL_postgres.xml
+
+  분류별 작성자(소유) TB_CATE_OWNER 매핑.
+   - 작성자 N명(부서/개인). 표시명은 COMTNORGNZTINFO / COMVNUSERMASTER 에서 해석.
+   - 가드(countAuthor): 규정분류 + 모든 조상(IREF CONNECT BY 상향) 중 소유 매칭. IREF_LV_* 는 미사용(0).
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.cate.mapper.CateOwnerMapper">
+
+	<resultMap id="cateOwnerResult" type="narainet.rlms.cate.service.CateOwnerVO">
+		<result property="cateNo"    column="ICATE_NO"/>
+		<result property="ownerTy"   column="OWNER_TY"/>
+		<result property="ownerId"   column="OWNER_ID"/>
+		<result property="inheritYn" column="INHERIT_YN"/>
+		<result property="insDt"     column="SINS_DT"/>
+		<result property="insId"     column="SINS_ID"/>
+		<result property="ownerNm"   column="OWNER_NM"/>
+		<result property="cateNm"    column="CATE_NM"/>
+	</resultMap>
+
+	<!-- 특정 분류의 작성자 목록 (표시명 해석) -->
+	<select id="selectOwnersByCate" resultMap="cateOwnerResult">
+		SELECT o.ICATE_NO, o.OWNER_TY, o.OWNER_ID, o.INHERIT_YN, o.SINS_DT, o.SINS_ID,
+		       CASE o.OWNER_TY
+		         WHEN 'DEPT' THEN (SELECT g.ORGNZT_NM FROM COMTNORGNZTINFO g WHERE g.ORGNZT_ID = o.OWNER_ID)
+		         WHEN 'USER' THEN (SELECT u.USER_NM   FROM COMVNUSERMASTER u WHERE u.ESNTL_ID  = o.OWNER_ID)
+		       END AS OWNER_NM,
+		       (SELECT c.SNAME FROM TB_CATE c WHERE c.ICATE_NO = o.ICATE_NO) AS CATE_NM
+		FROM   TB_CATE_OWNER o
+		WHERE  o.ICATE_NO = #{cateNo}
+		ORDER BY o.OWNER_TY, OWNER_NM
+	</select>
+
+	<!-- 작성자 추가 -->
+	<insert id="insertOwner" parameterType="narainet.rlms.cate.service.CateOwnerVO">
+		INSERT INTO TB_CATE_OWNER (ICATE_NO, OWNER_TY, OWNER_ID, INHERIT_YN, SINS_DT, SINS_ID)
+		VALUES ( #{cateNo}, #{ownerTy}, #{ownerId},
+		         COALESCE(#{inheritYn}, 'Y'),
+		         TO_CHAR(LOCALTIMESTAMP, 'YYYYMMDDHH24MISS'),
+		         #{insId} )
+	</insert>
+
+	<!-- 작성자 삭제 (PK 단건) -->
+	<delete id="deleteOwner">
+		DELETE FROM TB_CATE_OWNER
+		WHERE  ICATE_NO = #{cateNo}
+		AND    OWNER_TY = #{ownerTy}
+		AND    OWNER_ID = #{ownerId}
+	</delete>
+
+	<!-- PK 존재 여부 (중복 추가 방지) -->
+	<select id="countOwner" resultType="int">
+		SELECT COUNT(*) FROM TB_CATE_OWNER
+		WHERE  ICATE_NO = #{cateNo}
+		AND    OWNER_TY = #{ownerTy}
+		AND    OWNER_ID = #{ownerId}
+	</select>
+
+	<!-- 부서 옵션 (작성자 부서 선택 드롭다운) -->
+	<select id="selectDeptOptions" resultType="java.util.LinkedHashMap">
+		SELECT ORGNZT_ID AS "orgnztId", ORGNZT_NM AS "orgnztNm"
+		FROM   COMTNORGNZTINFO
+		ORDER BY ORGNZT_NM
+	</select>
+
+	<!-- 작성권한 가드 (검증완료) — 결과>0 이면 작성권한 있음 -->
+	<select id="countAuthor" resultType="int">
+		SELECT COUNT(*)
+		FROM   TB_CATE_OWNER o
+		WHERE  ( ( o.OWNER_TY = 'USER' AND o.OWNER_ID = #{esntlId} )
+		         OR ( o.OWNER_TY = 'DEPT' AND o.OWNER_ID = #{orgnztId} ) )
+		AND    o.ICATE_NO IN (
+		         WITH RECURSIVE anc AS (
+		           SELECT a.ICATE_NO, a.IREF FROM TB_CATE a WHERE a.ICATE_NO = #{cateNo}
+		           UNION ALL
+		           SELECT pa.ICATE_NO, pa.IREF FROM TB_CATE pa JOIN anc ON pa.ICATE_NO = anc.IREF )
+		         SELECT ICATE_NO FROM anc
+		       )
+		AND    ( o.ICATE_NO = #{cateNo} OR o.INHERIT_YN = 'Y' )
+	</select>
+
+	<!-- 이 분류에 적용되는 작성자 규칙 존재 여부(사용자 매칭 무관) — 자기분류 직접 OR 조상의 상속 규칙.
+	     0 = 작성자 미지정 분류 → PromEditGuard 가 규정 소관부서 폴백 적용 (2026-07-20 사용자 결정) -->
+	<select id="countApplicableOwnerRules" resultType="int">
+		SELECT COUNT(*)
+		FROM   TB_CATE_OWNER o
+		WHERE  o.ICATE_NO IN (
+		         WITH RECURSIVE anc AS (
+		           SELECT a.ICATE_NO, a.IREF FROM TB_CATE a WHERE a.ICATE_NO = #{cateNo}
+		           UNION ALL
+		           SELECT pa.ICATE_NO, pa.IREF FROM TB_CATE pa JOIN anc ON pa.ICATE_NO = anc.IREF )
+		         SELECT ICATE_NO FROM anc
+		       )
+		AND    ( o.ICATE_NO = #{cateNo} OR o.INHERIT_YN = 'Y' )
+	</select>
+
+</mapper>

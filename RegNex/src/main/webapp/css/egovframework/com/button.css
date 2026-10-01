@@ -1,0 +1,26 @@
+@charset "utf-8";
+/*
+ * button.css — DEPRECATED (RLMS 무력화)
+ *
+ * 원본은 .button / .button a / .button input 등 옛 이미지 기반 버튼 스타일.
+ * KRDS .krds-btn + rlms-compat.css 의 .btn_*/.s_*/.btn_style* 매핑으로 통일.
+ *
+ * 옛 .button 클래스를 쓰는 표준 JSP 도 rlms-compat.css 의 일반 버튼 매핑으로
+ * KRDS 톤으로 표시됨.
+ *
+ * 원본 복원 필요 시: git log -- css/egovframework/com/button.css 의 직전 커밋.
+ */
+
+/* 옛 .button (이미지 기반 button-set 컨테이너) — 최소 호환 (인라인 정렬만) */
+.button {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0;
+  padding: 0;
+}
+.button a,
+.button button,
+.button input {
+  display: inline-block;
+  vertical-align: middle;
+}

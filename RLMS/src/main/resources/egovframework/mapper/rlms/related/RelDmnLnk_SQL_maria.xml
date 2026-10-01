@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelDmnLnk_SQL_maria.xml
+
+  관련자료 — DOMAIN_LINK 액션 자식(TB_REL_DMN_LNK) MyBatis 매핑.
+   - IRVRSN_NO 는 VARCHAR2 (레거시 특이 설계). String 으로 바인딩.
+   - 표시용 부가 정보(targetPromTitle, targetCatePath) 는 TB_PROM/COMTCCMMNCODE/카테고리 조인으로
+     채워서 클라이언트가 별도 호출 없이 표시 가능.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelDmnLnkMapper">
+
+	<resultMap id="relDmnLnkResult" type="narainet.rlms.related.service.RelDmnLnkVO">
+		<result property="relDmnLnkNo"     column="IRDLNK_NO"/>
+		<result property="relVrsnNo"       column="IRVRSN_NO"/>
+		<result property="flag"            column="SFLAG"/>
+		<result property="lawId"           column="ILAW_ID"/>
+		<result property="lawNo"           column="ILAW_NO"/>
+		<result property="fullItem"        column="SFULL_ITEM"/>
+		<result property="title"           column="STITLE"/>
+		<result property="seq"             column="ISEQ"/>
+		<result property="insDt"           column="SINS_DT"/>
+		<result property="sysId"           column="SSYS_ID"/>
+		<result property="alwaysLatestYn"  column="SAWS_LST_YN"/>
+		<result property="fileItem"        column="SFILE_ITEM"/>
+		<result property="targetPromTitle" column="TARGET_PROM_TITLE"/>
+		<result property="targetPromNo"    column="TARGET_PROM_NO"/>
+		<result property="targetCatePath"  column="TARGET_CATE_PATH"/>
+	</resultMap>
+
+	<sql id="relDmnLnkCols">
+		L.IRDLNK_NO, L.IRVRSN_NO, L.SFLAG, L.ILAW_ID, L.ILAW_NO, L.SFULL_ITEM,
+		L.STITLE, L.ISEQ, L.SINS_DT, L.SSYS_ID, L.SAWS_LST_YN, L.SFILE_ITEM
+	</sql>
+
+	<!--
+	  대상 규정/회차 해석 (라벨 + 점프용 promNo). ★노출 회차(SDISP_YN='Y')만 — front 가시성 계약.
+	    레거시 front 점프(getByLawId)도 displayYN='Y' 강제라 숨김 회차 도달 불가. 숨김만 남으면
+	    NULL → 화면이 "대상 회차 없음" 처리.
+	  SAWS_LST_YN='Y'(항상현행): 현행(SEXISTING_YN='Y') &gt; 저장된 ILAW_NO 회차 &gt; 최신 노출 회차
+	    순으로 폴백 (현행 숨김/폐지 규정 대응 — 레거시 "최신 노출 회차" 의미 보존).
+	  SAWS_LST_YN='N': 저장된 ILAW_NO 회차 고정.
+	  실DB 검증(2026-06-11): (ILAW_ID,ILAW_NO) 중복 쌍 존재 — KEEP 정렬로 결정적 선택.
+	  두 스칼라 서브쿼리는 동일 정렬이라 같은 행을 가리킴.
+	-->
+	<!-- Oracle KEEP(DENSE_RANK FIRST) 스칼라 → 동일 우선순위 ORDER BY + LIMIT 1 (결정적 선택 보존) -->
+	<sql id="dmnTargetOrder">
+		ORDER BY CASE WHEN P.SEXISTING_YN = 'Y' THEN 0
+		              WHEN P.ILAW_NO = L.ILAW_NO THEN 1
+		              ELSE 2 END,
+		         P.ILAW_NO DESC, P.IPROM_NO DESC
+		LIMIT 1
+	</sql>
+	<sql id="dmnTargetFromWhere">
+		FROM TB_PROM P
+		WHERE P.ILAW_ID  = L.ILAW_ID
+		  AND P.SDISP_YN = 'Y'
+		  AND ( L.SAWS_LST_YN = 'Y' OR P.ILAW_NO = L.ILAW_NO )
+	</sql>
+
+	<select id="selectByRelVrsnNo" resultMap="relDmnLnkResult">
+		SELECT <include refid="relDmnLnkCols"/>,
+		       ( SELECT P.STITLE   <include refid="dmnTargetFromWhere"/> <include refid="dmnTargetOrder"/> ) AS TARGET_PROM_TITLE,
+		       ( SELECT P.IPROM_NO <include refid="dmnTargetFromWhere"/> <include refid="dmnTargetOrder"/> ) AS TARGET_PROM_NO,
+		       NULL AS TARGET_CATE_PATH
+		  FROM TB_REL_DMN_LNK L
+		 WHERE L.IRVRSN_NO = #{relVrsnNo}
+		 ORDER BY L.ISEQ, L.IRDLNK_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relDmnLnkResult">
+		SELECT <include refid="relDmnLnkCols"/>,
+		       NULL AS TARGET_PROM_TITLE, NULL AS TARGET_PROM_NO, NULL AS TARGET_CATE_PATH
+		  FROM TB_REL_DMN_LNK L
+		 WHERE L.IRDLNK_NO = #{relDmnLnkNo}
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelDmnLnkVO">
+		INSERT INTO TB_REL_DMN_LNK (
+			IRDLNK_NO, IRVRSN_NO, SFLAG, ILAW_ID, ILAW_NO, SFULL_ITEM,
+			STITLE, ISEQ, SINS_DT, SAWS_LST_YN, SFILE_ITEM
+		) VALUES (
+			#{relDmnLnkNo},
+			#{relVrsnNo,jdbcType=VARCHAR},
+			#{flag,jdbcType=VARCHAR},
+			#{lawId,jdbcType=NUMERIC},
+			#{lawNo,jdbcType=NUMERIC},
+			#{fullItem,jdbcType=VARCHAR},
+			#{title,jdbcType=VARCHAR},
+			#{seq,jdbcType=NUMERIC},
+			#{insDt,jdbcType=VARCHAR},
+			#{alwaysLatestYn,jdbcType=VARCHAR},
+			#{fileItem,jdbcType=NUMERIC}
+		)
+	</insert>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_DMN_LNK WHERE IRDLNK_NO = #{relDmnLnkNo}
+	</delete>
+
+	<delete id="deleteByRelVrsnNo">
+		DELETE FROM TB_REL_DMN_LNK WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+</mapper>

@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/lawquest/LawQuest_SQL_oracle.xml
+
+  법령질의(법률자문) — TB_LAWQUEST MyBatis 매핑.
+   - 레거시 COUNTLAW(모델 Countlaw) 1:1 이관. 2026-06-17 테이블 개명(COUNTLAW→TB_LAWQUEST).
+   - 첨부건수는 TB_ATTACH(SREF_TABLE='TB_LAWQUEST', IREF_NO=NO) 조인 카운트.
+   - WRITEDAY(DATE)는 조회 시 TO_CHAR 포맷, INSERT 는 SYSDATE.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.lawquest.mapper.LawQuestMapper">
+
+	<resultMap id="lawQuestResult" type="narainet.rlms.lawquest.service.LawQuestVO">
+		<id     property="no"          column="NO"/>
+		<result property="id"          column="ID"/>
+		<result property="name"        column="NAME"/>
+		<result property="year"        column="YEAR"/>
+		<result property="type"        column="TYPE"/>
+		<result property="sosok"       column="SOSOK"/>
+		<result property="gigwan"      column="GIGWAN"/>
+		<result property="lawer"       column="LAWER"/>
+		<result property="gumaek"      column="GUMAEK"/>
+		<result property="ilja1"       column="ILJA1"/>
+		<result property="ilja2"       column="ILJA2"/>
+		<result property="subject"     column="SUBJECT"/>
+		<result property="questCon"    column="QUEST_CON"/>
+		<result property="respoCon"    column="RESPO_CON"/>
+		<result property="writeday"    column="WRITEDAY"/>
+		<result property="readnum"     column="READNUM"/>
+		<result property="buget"       column="BUGET"/>
+		<result property="publicYn"    column="PUBLIC_YN"/>
+		<result property="attachCount" column="ATTACH_COUNT"/>
+	</resultMap>
+
+	<!-- 검색 조건 (목록/카운트/엑셀 공용) -->
+	<sql id="searchWhere">
+		WHERE 1 = 1
+		<if test="vo.publicOnly">
+			AND q.PUBLIC_YN = '1'
+		</if>
+		<if test="vo.searchType != null and vo.searchType != ''">
+			AND q.TYPE = #{vo.searchType}
+		</if>
+		<if test="vo.searchYear != null and vo.searchYear != ''">
+			AND q.YEAR = #{vo.searchYear}
+		</if>
+		<if test="vo.searchKeyword != null and vo.searchKeyword != ''">
+			<choose>
+				<when test="vo.searchCnd == 'gigwan'">
+					AND UPPER(q.GIGWAN) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+				</when>
+				<when test="vo.searchCnd == 'sosok'">
+					AND UPPER(q.SOSOK) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+				</when>
+				<otherwise>
+					AND UPPER(q.SUBJECT) LIKE '%' || UPPER(#{vo.searchKeyword}) || '%'
+				</otherwise>
+			</choose>
+		</if>
+	</sql>
+
+	<select id="selectList" resultMap="lawQuestResult">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT q.NO, q.ID, q.NAME, q.YEAR, q.TYPE, q.SOSOK, q.GIGWAN, q.LAWER,
+			       q.GUMAEK, q.ILJA1, q.ILJA2, q.SUBJECT,
+			       TO_CHAR(q.WRITEDAY, 'YYYY-MM-DD') AS WRITEDAY, q.READNUM,
+			       q.BUGET, q.PUBLIC_YN,
+			       ( SELECT COUNT(*) FROM TB_ATTACH a
+			          WHERE a.SREF_TABLE = 'TB_LAWQUEST' AND a.IREF_NO = q.NO ) AS ATTACH_COUNT
+			  FROM TB_LAWQUEST q
+			<include refid="searchWhere"/>
+			 ORDER BY q.NO DESC
+		) TB ) WHERE rn BETWEEN #{vo.firstIndex}+1 AND #{vo.firstIndex}+#{vo.recordCountPerPage}
+	</select>
+
+	<select id="selectListCnt" resultType="int">
+		SELECT COUNT(*) FROM TB_LAWQUEST q
+		<include refid="searchWhere"/>
+	</select>
+
+	<!-- 엑셀용 전체 목록 (페이징 없음, 동일 검색조건) -->
+	<select id="selectListAll" resultMap="lawQuestResult">
+		SELECT q.NO, q.ID, q.NAME, q.YEAR, q.TYPE, q.SOSOK, q.GIGWAN, q.LAWER,
+		       q.GUMAEK, q.ILJA1, q.ILJA2, q.SUBJECT,
+		       TO_CHAR(q.WRITEDAY, 'YYYY-MM-DD') AS WRITEDAY, q.READNUM,
+		       q.BUGET, q.PUBLIC_YN
+		  FROM TB_LAWQUEST q
+		<include refid="searchWhere"/>
+		 ORDER BY q.NO DESC
+	</select>
+
+	<select id="selectByNo" resultMap="lawQuestResult">
+		SELECT q.NO, q.ID, q.NAME, q.YEAR, q.TYPE, q.SOSOK, q.GIGWAN, q.LAWER,
+		       q.GUMAEK, q.ILJA1, q.ILJA2, q.SUBJECT, q.QUEST_CON, q.RESPO_CON,
+		       TO_CHAR(q.WRITEDAY, 'YYYY-MM-DD HH24:MI') AS WRITEDAY, q.READNUM,
+		       q.BUGET, q.PUBLIC_YN,
+		       ( SELECT COUNT(*) FROM TB_ATTACH a
+		          WHERE a.SREF_TABLE = 'TB_LAWQUEST' AND a.IREF_NO = q.NO ) AS ATTACH_COUNT
+		  FROM TB_LAWQUEST q
+		 WHERE q.NO = #{no}
+	</select>
+
+	<select id="selectYears" resultType="string">
+		SELECT DISTINCT YEAR FROM TB_LAWQUEST WHERE YEAR IS NOT NULL ORDER BY YEAR DESC
+	</select>
+
+	<insert id="insert" parameterType="narainet.rlms.lawquest.service.LawQuestVO">
+		INSERT INTO TB_LAWQUEST (
+			NO, ID, NAME, YEAR, TYPE, SOSOK, GIGWAN, LAWER, GUMAEK,
+			ILJA1, ILJA2, SUBJECT, QUEST_CON, RESPO_CON, WRITEDAY, READNUM,
+			BUGET, PUBLIC_YN
+		) VALUES (
+			#{no}, #{id}, #{name}, #{year}, #{type},
+			#{sosok,jdbcType=VARCHAR}, #{gigwan,jdbcType=VARCHAR}, #{lawer,jdbcType=VARCHAR},
+			#{gumaek}, #{ilja1,jdbcType=VARCHAR}, #{ilja2,jdbcType=VARCHAR}, #{subject},
+			#{questCon,jdbcType=CLOB}, #{respoCon,jdbcType=CLOB},
+			SYSDATE, 0, #{buget,jdbcType=VARCHAR}, #{publicYn,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.lawquest.service.LawQuestVO">
+		UPDATE TB_LAWQUEST SET
+			YEAR      = #{year},
+			TYPE      = #{type},
+			SOSOK     = #{sosok,jdbcType=VARCHAR},
+			GIGWAN    = #{gigwan,jdbcType=VARCHAR},
+			LAWER     = #{lawer,jdbcType=VARCHAR},
+			GUMAEK    = #{gumaek},
+			ILJA1     = #{ilja1,jdbcType=VARCHAR},
+			ILJA2     = #{ilja2,jdbcType=VARCHAR},
+			SUBJECT   = #{subject},
+			QUEST_CON = #{questCon,jdbcType=CLOB},
+			RESPO_CON = #{respoCon,jdbcType=CLOB},
+			BUGET     = #{buget,jdbcType=VARCHAR},
+			PUBLIC_YN = #{publicYn,jdbcType=VARCHAR}
+		WHERE NO = #{no}
+	</update>
+
+	<update id="increaseReadnum">
+		UPDATE TB_LAWQUEST SET READNUM = NVL(READNUM,0) + 1 WHERE NO = #{no}
+	</update>
+
+	<delete id="delete">
+		DELETE FROM TB_LAWQUEST WHERE NO = #{no}
+	</delete>
+
+	<select id="countAdmin" resultType="int">
+		SELECT COUNT(*) FROM TB_LAWQUEST_ADMIN WHERE ADMIN_SABUN = #{sabun}
+	</select>
+
+	<!-- ── 답변권한자 레지스트리 (TB_LAWQUEST_ADMIN) ──────────────
+	     ADMIN_SABUN = RLMS 회원 USER_ID(VARCHAR2 20). 회원(COMVNUSERMASTER)·부서 조인으로
+	     현재 회원명/부서 표시. 레거시 사번(매칭 없음)은 USER_NM NULL 로 구분. -->
+	<resultMap id="lawQuestAdminResult" type="narainet.rlms.lawquest.service.LawQuestAdminVO">
+		<id     property="sabun"    column="ADMIN_SABUN"/>
+		<result property="name"     column="ADMIN_NAME"/>
+		<result property="userNm"   column="USER_NM"/>
+		<result property="orgnztNm" column="ORGNZT_NM"/>
+	</resultMap>
+
+	<select id="selectAdminList" resultMap="lawQuestAdminResult">
+		SELECT a.ADMIN_SABUN, a.ADMIN_NAME, u.USER_NM, o.ORGNZT_NM
+		  FROM TB_LAWQUEST_ADMIN a
+		  LEFT JOIN COMVNUSERMASTER u ON u.USER_ID = a.ADMIN_SABUN
+		  LEFT JOIN COMTNORGNZTINFO o ON o.ORGNZT_ID = u.ORGNZT_ID
+		 ORDER BY a.ADMIN_SABUN
+	</select>
+
+	<!-- 회원 검색 (이름/ID, COMVNUSERMASTER + 부서) — 답변자 추가 picker -->
+	<select id="searchMembers" resultType="java.util.LinkedHashMap">
+		SELECT * FROM (
+			SELECT u.USER_ID AS "userId", u.USER_NM AS "userNm", u.USER_SE AS "userSe",
+			       o.ORGNZT_NM AS "orgnztNm",
+			       (SELECT COUNT(*) FROM TB_LAWQUEST_ADMIN a WHERE a.ADMIN_SABUN = u.USER_ID) AS "already"
+			  FROM COMVNUSERMASTER u
+			  LEFT JOIN COMTNORGNZTINFO o ON o.ORGNZT_ID = u.ORGNZT_ID
+			 WHERE UPPER(u.USER_NM) LIKE '%' || UPPER(#{kw}) || '%'
+			    OR UPPER(u.USER_ID) LIKE '%' || UPPER(#{kw}) || '%'
+			 ORDER BY u.USER_NM, u.USER_ID
+		) WHERE ROWNUM &lt;= 50
+	</select>
+
+	<insert id="insertAdmin" parameterType="narainet.rlms.lawquest.service.LawQuestAdminVO">
+		INSERT INTO TB_LAWQUEST_ADMIN (ADMIN_SABUN, ADMIN_NAME)
+		VALUES (#{sabun}, #{name,jdbcType=VARCHAR})
+	</insert>
+
+	<delete id="deleteAdmin">
+		DELETE FROM TB_LAWQUEST_ADMIN WHERE ADMIN_SABUN = #{sabun}
+	</delete>
+
+</mapper>

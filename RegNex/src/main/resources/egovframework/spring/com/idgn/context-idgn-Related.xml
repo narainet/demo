@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/spring/com/idgn/context-idgn-Related.xml
+
+  관련자료 8 액션 + 카테고리 PK 채번 빈 (레거시 SQ_REL_*_NO → COMTECOPSEQ 전환).
+   - egovRelVrsnIdGnrService     : TB_REL_VRSN.IRVRSN_NO       ← REL_VRSN_ID
+   - egovRelVrsnCateIdGnrService : TB_REL_VRSN_CATE.IRVCATE_NO ← REL_VRSN_CATE_ID
+   - egovRelFileIdGnrService     : TB_REL_FILE.IRFILE_NO       ← REL_FILE_ID
+   - egovRelOrgnIdGnrService     : TB_REL_ORGN.IRORGN_NO       ← REL_ORGN_ID
+   - egovRelImgIdGnrService      : TB_REL_IMG.IRIMG_NO         ← REL_IMG_ID
+   - egovRelHtmlIdGnrService     : TB_REL_HTML.IRHTML_NO       ← REL_HTML_ID
+   - egovRelLnkIdGnrService      : TB_REL_LNK.IRLINK_NO        ← REL_LNK_ID
+   - egovRelDmnLnkIdGnrService   : TB_REL_DMN_LNK.IRDLNK_NO    ← REL_DMN_LNK_ID
+   - egovRelWordIdGnrService     : TB_REL_WORD.IRWORD_NO       ← REL_WORD_ID
+
+  COMTECOPSEQ row 9건은 database/rlms_related_init.sql 에서 INSERT.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <bean name="egovRelVrsnIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relVrsnIdStrategy"/>
+        <property name="blockSize"  value="50"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_VRSN_ID"/>
+    </bean>
+    <bean name="relVrsnIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelVrsnCateIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relVrsnCateIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_VRSN_CATE_ID"/>
+    </bean>
+    <bean name="relVrsnCateIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelFileIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relFileIdStrategy"/>
+        <property name="blockSize"  value="50"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_FILE_ID"/>
+    </bean>
+    <bean name="relFileIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelOrgnIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relOrgnIdStrategy"/>
+        <property name="blockSize"  value="20"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_ORGN_ID"/>
+    </bean>
+    <bean name="relOrgnIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelImgIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relImgIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_IMG_ID"/>
+    </bean>
+    <bean name="relImgIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelHtmlIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relHtmlIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_HTML_ID"/>
+    </bean>
+    <bean name="relHtmlIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelLnkIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relLnkIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_LNK_ID"/>
+    </bean>
+    <bean name="relLnkIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelDmnLnkIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relDmnLnkIdStrategy"/>
+        <property name="blockSize"  value="10"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_DMN_LNK_ID"/>
+    </bean>
+    <bean name="relDmnLnkIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+    <bean name="egovRelWordIdGnrService"
+          class="org.egovframe.rte.fdl.idgnr.impl.EgovTableIdGnrServiceImpl"
+          destroy-method="destroy">
+        <property name="dataSource" ref="egov.dataSource"/>
+        <property name="strategy"   ref="relWordIdStrategy"/>
+        <property name="blockSize"  value="20"/>
+        <property name="table"      value="COMTECOPSEQ"/>
+        <property name="tableName"  value="REL_WORD_ID"/>
+    </bean>
+    <bean name="relWordIdStrategy"
+          class="org.egovframe.rte.fdl.idgnr.impl.strategy.EgovIdGnrStrategyImpl">
+        <property name="cipers" value="20"/>
+    </bean>
+
+</beans>

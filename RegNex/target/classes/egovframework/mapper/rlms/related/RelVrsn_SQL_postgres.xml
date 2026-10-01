@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/related/RelVrsn_SQL_postgres.xml
+
+  관련자료 허브(TB_REL_VRSN) + 카테고리(TB_REL_VRSN_CATE) MyBatis 매핑 — READ + WRITE.
+   - TB_REL_VRSN 한 row = 8 액션 자료 1건의 마스터. STABLE 컬럼이 실제 리소스 테이블.
+   - TB_REL_VRSN_CATE — 카테고리 그룹 (법령별 동적 + "본문/붙임/양식" 시드).
+
+  2026-05-14 — narainet.rlms.relvrsn → narainet.rlms.related 패키지 통합 이동.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.related.mapper.RelVrsnMapper">
+
+	<resultMap id="relVrsnResult" type="narainet.rlms.related.service.RelVrsnVO">
+		<result property="relVrsnNo"  column="IRVRSN_NO"/>
+		<result property="promNo"     column="IPROM_NO"/>
+		<result property="ctnsId"     column="ICTNS_ID"/>
+		<result property="vrsnYn"     column="SVRSN_YN"/>
+		<result property="stable"     column="STABLE"/>
+		<result property="flag"       column="SFLAG"/>
+		<result property="fullItem"   column="SFULL_ITEM"/>
+		<result property="title"      column="STITLE"/>
+		<result property="seq"        column="ISEQ"/>
+		<result property="url"        column="SURL"/>
+		<result property="cateNo"     column="IRVCATE_NO"/>
+		<result property="cateName"   column="IRVCATE_NM"/>
+		<result property="cateOrder"  column="IRVCATE_ODR"/>
+		<result property="insDt"      column="SINS_DT"/>
+		<result property="sysId"      column="SSYS_ID"/>
+		<!-- 카테고리 조인 부가 -->
+		<result property="cateTitle"  column="CATE_TITLE"/>
+		<result property="cateSeq"    column="CATE_SEQ"/>
+		<result property="orgnDownYn" column="ORGN_DOWN_YN"/>
+	</resultMap>
+
+	<sql id="relVrsnCols">
+		V.IRVRSN_NO, V.IPROM_NO, V.ICTNS_ID, V.SVRSN_YN, V.STABLE, V.SFLAG, V.SFULL_ITEM,
+		V.STITLE, V.ISEQ, V.SURL, V.IRVCATE_NO, V.IRVCATE_NM, V.IRVCATE_ODR,
+		V.SINS_DT, V.SSYS_ID,
+		C.STITLE       AS CATE_TITLE,
+		C.ISEQ         AS CATE_SEQ,
+		C.SORGNDOWN_YN AS ORGN_DOWN_YN
+	</sql>
+
+	<!--
+	  PROMULGATION 단위 (회차 전체에 붙은 자료) — SFLAG='PROMULGATION' 또는 SFLAG NULL.
+	  카테고리 정렬: 명시된 ISEQ 우선, 동률이면 카테고리명, 그 다음 항목 ISEQ.
+	  카테고리가 없는 자료(IRVCATE_NO IS NULL) 도 LEFT JOIN 으로 살림 — 맨 뒤로 정렬.
+	-->
+	<select id="selectByPromNo" resultMap="relVrsnResult">
+		SELECT <include refid="relVrsnCols"/>
+		  FROM TB_REL_VRSN V
+		  LEFT OUTER JOIN TB_REL_VRSN_CATE C ON V.IRVCATE_NO = C.IRVCATE_NO
+		 WHERE V.IPROM_NO = #{promNo}
+		   AND ( V.SFLAG IS NULL OR V.SFLAG = 'PROMULGATION' )
+		 ORDER BY COALESCE(C.ISEQ, 9999), C.STITLE, COALESCE(V.ISEQ, 9999), V.IRVRSN_NO
+	</select>
+
+	<!--
+	  ★ 사용자 뷰어, 회차 자료 누적 조회 (레거시 getContentsList 마스터 레벨 이식).
+	    같은 법령 회차들(ILAW_NO 이하) 중 ICTNS_ID 별 최신 회차의 마스터 행만 채택.
+	    SVRSN_YN='Y'(회차간 상속) 만 과거 회차에서 끌어오고, 'N'/NULL 은 자기 회차 전용.
+	    selectByPromNo 와 동일한 컬럼/카테고리 조인/정렬 — 응답 호환.
+	  레거시 파리티 특례 2종 (2026-06-11 보강):
+	    1. notDiffLawNo (전면개정 차단) — TB_GAEJUNG.SDIFF_YN='N' 회차가 있으면 그 이전 자료는
+	       누적하지 않음 (레거시 PromulgationDAO.getLawNoByNotDifference + PR2.ILAW_NO 하한).
+	    2. LNK/DMN_LNK 현재회차 우선 — 현재 회차에 자체 등록분이 있으면 과거 회차 누적 차단.
+	       레거시 getContentsList 의 notDiffLawNo=현재 lawNo 승격을 마스터 레벨 NOT EXISTS 로 구현.
+	       (레거시 사용자뷰어 런타임은 flag='' 빈문자열 바인드 버그로 이 승격이 미발동이었음 —
+	        관리측 동작과 코드 주석의 "현재 버전이 있으면 누적 의미 없음" 의도 기준으로 채택.
+	        이 절이 없으면 현재 회차에서 삭제한 링크가 과거 상속분으로 부활함.)
+	-->
+	<select id="selectByPromCumulative" resultMap="relVrsnResult">
+		SELECT <include refid="relVrsnCols"/>
+		  FROM TB_REL_VRSN V
+		  JOIN TB_PROM PR ON PR.IPROM_NO = V.IPROM_NO
+		  JOIN ( SELECT MAX(PR2.ILAW_NO) AS LAW_NO, V2.ICTNS_ID
+		           FROM TB_REL_VRSN V2
+		           JOIN TB_PROM PR2 ON PR2.IPROM_NO = V2.IPROM_NO
+		          WHERE PR2.ILAW_ID = #{lawId}
+		            AND PR2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		            <if test="notDiffLawNo != null and notDiffLawNo > 0">
+		            AND PR2.ILAW_NO <![CDATA[ >= ]]> #{notDiffLawNo}
+		            </if>
+		            AND ( V2.SFLAG IS NULL OR V2.SFLAG = 'PROMULGATION' )
+		          GROUP BY V2.ICTNS_ID ) MX
+		       ON MX.ICTNS_ID = V.ICTNS_ID AND PR.ILAW_NO = MX.LAW_NO
+		  LEFT OUTER JOIN TB_REL_VRSN_CATE C ON V.IRVCATE_NO = C.IRVCATE_NO
+		 WHERE PR.ILAW_ID = #{lawId}
+		   AND ( V.SFLAG IS NULL OR V.SFLAG = 'PROMULGATION' )
+		   AND ( ( PR.ILAW_NO = #{lawNo} AND COALESCE(V.SVRSN_YN, 'N') = 'N' )
+		      OR V.SVRSN_YN = 'Y' )
+		   AND ( V.STABLE NOT IN ('TB_REL_LNK', 'TB_REL_DMN_LNK')
+		      OR PR.ILAW_NO = #{lawNo}
+		      OR NOT EXISTS ( SELECT 1
+		                        FROM TB_REL_VRSN VC
+		                        JOIN TB_PROM PC ON PC.IPROM_NO = VC.IPROM_NO
+		                       WHERE PC.ILAW_ID = #{lawId}
+		                         AND PC.ILAW_NO = #{lawNo}
+		                         AND VC.STABLE  = V.STABLE
+		                         AND ( VC.SFLAG IS NULL OR VC.SFLAG = 'PROMULGATION' ) ) )
+		 ORDER BY COALESCE(C.ISEQ, 9999), C.STITLE, COALESCE(V.ISEQ, 9999), V.IRVRSN_NO
+	</select>
+
+	<!-- 한 조항/별표(SFULL_ITEM) 에 붙은 자료.
+	     flag 미지정이면 조항(PROVISION) — 별표 편집 화면은 flag='DOCUMENT' 로 호출 (2026-07-30) -->
+	<select id="selectByPromAndFullItem" resultMap="relVrsnResult">
+		SELECT <include refid="relVrsnCols"/>
+		  FROM TB_REL_VRSN V
+		  LEFT OUTER JOIN TB_REL_VRSN_CATE C ON V.IRVCATE_NO = C.IRVCATE_NO
+		 WHERE V.IPROM_NO   = #{promNo}
+		   AND V.SFLAG      = <choose><when test="flag != null and flag != ''">#{flag}</when><otherwise>'PROVISION'</otherwise></choose>
+		   AND V.SFULL_ITEM = #{fullItem}
+		 ORDER BY COALESCE(C.ISEQ, 9999), C.STITLE, COALESCE(V.ISEQ, 9999), V.IRVRSN_NO
+	</select>
+
+	<!--
+	  별표/별지서식 개별 첨부 (2026-07-30 고객 요청).
+	  축은 신설하지 않고 기존 관련자료를 그대로 쓴다:
+	      TB_REL_VRSN(SFLAG='DOCUMENT', IPROM_NO=별표 소유 회차, SFULL_ITEM=별표 SITEM)
+	        -> TB_REL_FILE -> TB_ATTACH
+	  별표 삭제 시 TRG_DEL_DOCU 가 이 사슬을 통째로 정리한다(REL_VRSN -> REL_FILE -> ATTACH).
+	  누적은 호출자가 이미 해결한 상태 — 누적 별표 목록의 IDOCU_NO 를 그대로 받아 조인하므로
+	  각 별표의 "소유 회차" 첨부가 자연히 따라온다.
+	-->
+	<select id="selectDocuFilesByDocuNos" resultType="java.util.LinkedHashMap">
+		SELECT D.IDOCU_NO AS "docuNo",
+		       A.IATT_NO  AS "attNo",
+		       COALESCE(NULLIF(TRIM(F.STITLE), ''), A.SNAME) AS "title",
+		       A.SEXT     AS "ext",
+		       A.ISIZE    AS "fileSize",
+		       COALESCE(A.IDOWN_CNT, 0) AS "downCnt"
+		  FROM TB_DOCU D
+		  JOIN TB_REL_VRSN V  ON V.IPROM_NO   = D.IPROM_NO
+		                     AND V.SFLAG      = 'DOCUMENT'
+		                     AND V.SFULL_ITEM = D.SITEM
+		  JOIN TB_REL_FILE F  ON F.IRVRSN_NO  = V.IRVRSN_NO
+		                     AND COALESCE(F.SDEL_YN, 'N') != 'Y'
+		  JOIN TB_ATTACH A    ON A.IATT_NO    = F.IATT_NO
+		 WHERE D.IDOCU_NO IN
+		<foreach item="no" collection="docuNos" open="(" separator="," close=")">#{no}</foreach>
+		 ORDER BY D.IDOCU_NO, COALESCE(V.ISEQ, 9999), A.IATT_NO
+	</select>
+
+	<select id="selectByNo" resultMap="relVrsnResult">
+		SELECT <include refid="relVrsnCols"/>
+		  FROM TB_REL_VRSN V
+		  LEFT OUTER JOIN TB_REL_VRSN_CATE C ON V.IRVCATE_NO = C.IRVCATE_NO
+		 WHERE V.IRVRSN_NO = #{relVrsnNo}
+	</select>
+
+	<!--
+	  같은 도메인(promNo + stable + flag + fullItem) 의 기존 마스터.
+	  LINK / DOMAIN_LINK 의 DELETE-then-INSERT 패턴이 재사용 — 가장 큰 IRVRSN_NO 1건.
+	-->
+	<select id="selectExistingMaster" resultMap="relVrsnResult">
+		SELECT <include refid="relVrsnCols"/>
+		  FROM TB_REL_VRSN V
+		  LEFT OUTER JOIN TB_REL_VRSN_CATE C ON V.IRVCATE_NO = C.IRVCATE_NO
+		 WHERE V.IPROM_NO = #{promNo}
+		   AND V.STABLE   = #{stable}
+		   AND V.SFLAG    = #{flag}
+		<choose>
+			<when test="fullItem != null and fullItem != ''">
+		   AND V.SFULL_ITEM = #{fullItem}
+			</when>
+			<otherwise>
+		   AND ( V.SFULL_ITEM IS NULL OR V.SFULL_ITEM = '' OR V.SFULL_ITEM = '0' )
+			</otherwise>
+		</choose>
+		 ORDER BY V.IRVRSN_NO DESC
+		 LIMIT 1
+	</select>
+
+	<!-- ── WRITE ─────────────────────────────────────────────────────── -->
+
+	<insert id="insert" parameterType="narainet.rlms.related.service.RelVrsnVO">
+		INSERT INTO TB_REL_VRSN (
+			IRVRSN_NO, IPROM_NO, ICTNS_ID, SVRSN_YN, STABLE, SFLAG, SFULL_ITEM,
+			STITLE, ISEQ, SURL, IRVCATE_NO, IRVCATE_NM, IRVCATE_ODR,
+			SINS_DT
+		) VALUES (
+			#{relVrsnNo},
+			#{promNo},
+			#{ctnsId,jdbcType=NUMERIC},
+			#{vrsnYn,jdbcType=VARCHAR},
+			#{stable},
+			#{flag,jdbcType=VARCHAR},
+			#{fullItem,jdbcType=VARCHAR},
+			#{title,jdbcType=VARCHAR},
+			#{seq,jdbcType=NUMERIC},
+			#{url,jdbcType=VARCHAR},
+			#{cateNo,jdbcType=NUMERIC},
+			#{cateName,jdbcType=VARCHAR},
+			#{cateOrder,jdbcType=NUMERIC},
+			#{insDt,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="update" parameterType="narainet.rlms.related.service.RelVrsnVO">
+		UPDATE TB_REL_VRSN
+		   SET STITLE      = #{title,jdbcType=VARCHAR},
+		       ISEQ        = #{seq,jdbcType=NUMERIC},
+		       SURL        = #{url,jdbcType=VARCHAR},
+		       IRVCATE_NO  = #{cateNo,jdbcType=NUMERIC},
+		       IRVCATE_NM  = #{cateName,jdbcType=VARCHAR},
+		       IRVCATE_ODR = #{cateOrder,jdbcType=NUMERIC}
+		 WHERE IRVRSN_NO = #{relVrsnNo}
+	</update>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_VRSN WHERE IRVRSN_NO = #{relVrsnNo}
+	</delete>
+
+	<!-- 조 번호 변경 시 관련자료 이관 (2026-07-30) — 부착 축(SFLAG)은 그대로, 식별자만 교체 -->
+	<update id="updateFullItemForProm">
+		UPDATE TB_REL_VRSN
+		   SET SFULL_ITEM = #{newFullItem}
+		 WHERE IPROM_NO   = #{promNo}
+		   AND SFLAG      = #{flag}
+		   AND SFULL_ITEM = #{oldFullItem}
+	</update>
+
+	<select id="getNewContentsId" resultType="java.lang.Long">
+		SELECT COALESCE(MAX(ICTNS_ID), 0) + 1 FROM TB_REL_VRSN
+	</select>
+
+	<select id="getNextSeq" resultType="java.lang.Integer">
+		SELECT COALESCE(MAX(ISEQ), 0) + 1
+		  FROM TB_REL_VRSN
+		 WHERE IPROM_NO = #{promNo}
+		<choose>
+			<when test="cateNo != null">
+		   AND IRVCATE_NO = #{cateNo}
+			</when>
+			<otherwise>
+		   AND ( IRVCATE_NO IS NULL OR IRVCATE_NO = 0 )
+			</otherwise>
+		</choose>
+	</select>
+
+</mapper>

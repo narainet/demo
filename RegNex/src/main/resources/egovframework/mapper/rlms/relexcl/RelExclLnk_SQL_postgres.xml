@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/relexcl/RelExclLnk_SQL_postgres.xml
+
+  자동링크 제외범위 (TB_REL_EXCL_LNK) MyBatis 매핑.
+  레거시 RelatedExclusionLinkDAO + AjaxRelatedExclusionLinkController 이식.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.relexcl.mapper.RelExclLnkMapper">
+
+	<resultMap id="relExclResult" type="narainet.rlms.relexcl.service.RelExclLnkVO">
+		<result property="relnkNo"     column="IRELNK_NO"/>
+		<result property="sysId"       column="SSYS_ID"/>
+		<result property="flag"        column="SFLAG"/>
+		<result property="gubunId"     column="SGUBUN_ID"/>
+		<result property="cateNo"      column="ICATE_NO"/>
+		<result property="lawId"       column="ILAW_ID"/>
+		<result property="exclLawId"   column="IEXCL_LAW_ID"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="displayName" column="DISPLAY_NAME"/>
+	</resultMap>
+
+	<!--
+	  한 법령의 제외범위 전체. 레거시 의 getGubunLinkList + getCategoryLinkList + getFulltextLinkList
+	  를 한 SQL 의 UNION ALL 로 통합.
+	    · gubun  → COMTCCMMNDETAILCODE 의 CODE_NM 또는 SGUBUN_ID 그대로 (ccm 패러다임)
+	    · cate   → TB_CATE.SFULL_NAME (또는 GET_FULL_NAME_BY_CATE_NO 함수)
+	    · leaf   → "분류풀네임 > 규정명"
+	-->
+	<select id="selectExclList" resultMap="relExclResult">
+		<![CDATA[
+		SELECT IRELNK_NO, SSYS_ID, SFLAG, SGUBUN_ID, ICATE_NO, ILAW_ID, IEXCL_LAW_ID, SINS_DT, DISPLAY_NAME FROM (
+		    SELECT EL.IRELNK_NO, EL.SSYS_ID, EL.SFLAG, EL.SGUBUN_ID, EL.ICATE_NO, EL.ILAW_ID,
+		           EL.IEXCL_LAW_ID, EL.SINS_DT,
+		           COALESCE(CD.CODE_NM, EL.SGUBUN_ID) AS DISPLAY_NAME, 1 AS ORD
+		      FROM TB_REL_EXCL_LNK EL
+		      LEFT OUTER JOIN COMTCCMMNDETAILCODE CD
+		             ON CD.CODE_ID = 'SGUBUN' AND CD.CODE = EL.SGUBUN_ID
+		     WHERE EL.IEXCL_LAW_ID = #{exclLawId}
+		       AND EL.SFLAG = 'full_text_gubun'
+		    UNION ALL
+		    SELECT EL.IRELNK_NO, EL.SSYS_ID, EL.SFLAG, EL.SGUBUN_ID, EL.ICATE_NO, EL.ILAW_ID,
+		           EL.IEXCL_LAW_ID, EL.SINS_DT,
+		           GET_FULL_NAME_BY_CATE_NO('NONE', EL.ICATE_NO) AS DISPLAY_NAME, 2 AS ORD
+		      FROM TB_REL_EXCL_LNK EL
+		     WHERE EL.IEXCL_LAW_ID = #{exclLawId}
+		       AND EL.SFLAG = 'full_text_category'
+		    UNION ALL
+		    SELECT EL.IRELNK_NO, EL.SSYS_ID, EL.SFLAG, EL.SGUBUN_ID, EL.ICATE_NO, EL.ILAW_ID,
+		           EL.IEXCL_LAW_ID, EL.SINS_DT,
+		           COALESCE(
+		             (SELECT GET_FULL_NAME_BY_CATE_NO('NONE', P.ICATE_NO) || ' > ' || P.STITLE
+		                FROM TB_PROM P
+		               WHERE P.ILAW_ID = EL.ILAW_ID
+		                 AND P.SEXISTING_YN = 'Y'),
+		             '(법령 ID=' || EL.ILAW_ID || ')'
+		           ) AS DISPLAY_NAME, 3 AS ORD
+		      FROM TB_REL_EXCL_LNK EL
+		     WHERE EL.IEXCL_LAW_ID = #{exclLawId}
+		       AND EL.SFLAG = 'full_text_leaf'
+		) X ORDER BY ORD, DISPLAY_NAME
+		]]>
+		 LIMIT 1
+	</select>
+
+	<select id="selectByNo" resultMap="relExclResult">
+		SELECT IRELNK_NO, SSYS_ID, SFLAG, SGUBUN_ID, ICATE_NO, ILAW_ID, IEXCL_LAW_ID, SINS_DT,
+		       NULL AS DISPLAY_NAME
+		  FROM TB_REL_EXCL_LNK
+		 WHERE IRELNK_NO = #{relnkNo}
+	</select>
+
+	<select id="countDuplicate" resultType="int">
+		SELECT COUNT(*) FROM TB_REL_EXCL_LNK
+		 WHERE IEXCL_LAW_ID = #{exclLawId}
+		   AND SFLAG = #{flag}
+		<choose>
+			<when test="flag == 'full_text_gubun'">
+		   AND SGUBUN_ID = #{gubunId}
+			</when>
+			<when test="flag == 'full_text_category'">
+		   AND ICATE_NO = #{cateNo}
+			</when>
+			<when test="flag == 'full_text_leaf'">
+		   AND ILAW_ID = #{lawId}
+			</when>
+		</choose>
+	</select>
+
+	<insert id="insertExcl" parameterType="narainet.rlms.relexcl.service.RelExclLnkVO">
+		INSERT INTO TB_REL_EXCL_LNK (
+			IRELNK_NO, SFLAG, SGUBUN_ID, ICATE_NO, ILAW_ID, IEXCL_LAW_ID, SINS_DT
+		) VALUES (
+			#{relnkNo}, #{flag},
+			#{gubunId,jdbcType=VARCHAR},
+			#{cateNo,jdbcType=NUMERIC},
+			#{lawId,jdbcType=NUMERIC},
+			#{exclLawId,jdbcType=NUMERIC},
+			TO_CHAR(LOCALTIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+		)
+	</insert>
+
+	<delete id="deleteByNo">
+		DELETE FROM TB_REL_EXCL_LNK WHERE IRELNK_NO = #{relnkNo}
+	</delete>
+
+	<delete id="deleteByExclLawId">
+		DELETE FROM TB_REL_EXCL_LNK
+		 WHERE IEXCL_LAW_ID = #{exclLawId}
+	</delete>
+
+</mapper>

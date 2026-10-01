@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/prommap/PromMap_SQL_oracle.xml
+
+  기능별분류(규정맵, TB_PROM_MAP) MyBatis 매핑. 레거시 PromulgationMapDAO 이관.
+   - 트리 = IREF 자기참조(루트 IREF=0). CONNECT BY 한 방 로드.
+   - 폴더(SPROM_YN='N') / 규정 leaf(SPROM_YN='Y', IPROM_NO 참조).
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.prommap.mapper.PromMapMapper">
+
+	<resultMap id="promMapResult" type="narainet.rlms.prommap.service.PromMapVO">
+		<result property="pmapNo"   column="IPMAP_NO"/>
+		<result property="sysId"    column="SSYS_ID"/>
+		<result property="name"     column="SNAME"/>
+		<result property="fullName" column="SFULL_NAME"/>
+		<result property="promYn"   column="SPROM_YN"/>
+		<result property="level"    column="ILEVEL"/>
+		<result property="ref"      column="IREF"/>
+		<result property="dispYn"   column="SDISP_YN"/>
+		<result property="seq"      column="ISEQ"/>
+		<result property="insDt"    column="SINS_DT"/>
+		<result property="promNo"   column="IPROM_NO"/>
+		<result property="pendingYn" column="PENDING_YN"/><!-- selectMapTree 전용(타 쿼리 결과엔 없음=null) -->
+	</resultMap>
+
+	<!-- front 규정목록 조인 결과 전용 (실 법령 현행본) -->
+	<resultMap id="promMapFrontResult" type="narainet.rlms.prommap.service.PromMapVO">
+		<result property="promNo"       column="IPROM_NO"/>
+		<result property="promTitle"    column="STITLE"/>
+		<result property="promDate"     column="SPROM_DT"/>
+		<result property="cateFullName" column="SFULL_NAME"/>
+		<result property="sysId"        column="SSYS_ID"/>
+		<result property="pendingYn"    column="PENDING_YN"/>
+	</resultMap>
+
+	<sql id="mapCols">
+		IPMAP_NO, SSYS_ID, SNAME, SFULL_NAME, SPROM_YN,
+		ILEVEL, IREF, SDISP_YN, ISEQ, SINS_DT, IPROM_NO
+	</sql>
+
+	<!-- 전체 기능별분류 트리 (CONNECT BY). 형제 정렬 = 폴더('N')먼저 → ISEQ → IPROM_NO.
+	     PENDING_YN = 규정 leaf 스냅샷(IPROM_NO)이 속한 법령의 현행본 시행일이 미래면 'Y'(시행예정 뱃지, A안).
+	     규정 leaf 행에서만 계산(폴더 'N') — 행별 스칼라지만 2-테이블 인덱스 룩업이라 경량. -->
+	<select id="selectMapTree" resultMap="promMapResult">
+		SELECT <include refid="mapCols"/>,
+		       CASE WHEN SPROM_YN = 'Y' AND
+		            ( SELECT MAX(cur.SSTART_DT) FROM TB_PROM snap, TB_PROM cur
+		               WHERE snap.IPROM_NO = TB_PROM_MAP.IPROM_NO
+		                 AND cur.ILAW_ID = snap.ILAW_ID AND cur.SEXISTING_YN = 'Y'
+		            ) <![CDATA[ > ]]> TO_CHAR(SYSDATE, 'YYYY-MM-DD') THEN 'Y' ELSE 'N' END AS PENDING_YN
+		  FROM TB_PROM_MAP
+		 START WITH IREF = 0 AND SDISP_YN = 'Y'
+		 CONNECT BY PRIOR IPMAP_NO = IREF AND SDISP_YN = 'Y'
+		 ORDER SIBLINGS BY SPROM_YN, ISEQ, IPROM_NO
+	</select>
+
+	<!-- PK 단건 -->
+	<select id="selectByNo" resultMap="promMapResult">
+		SELECT <include refid="mapCols"/> FROM TB_PROM_MAP WHERE IPMAP_NO = #{pmapNo}
+	</select>
+
+	<!-- 직속 자식 (삭제 BFS / lazy) -->
+	<select id="selectChildrenByRef" resultMap="promMapResult">
+		SELECT <include refid="mapCols"/>
+		  FROM TB_PROM_MAP
+		 WHERE IREF = #{ref} AND SDISP_YN = 'Y'
+		 ORDER BY SPROM_YN, ISEQ, IPROM_NO
+	</select>
+
+	<!-- 부모(ref) 안 정렬순서 MAX(ISEQ)+1 (레거시 getMaxSequence) -->
+	<select id="selectMaxSeq" resultType="int">
+		SELECT NVL(MAX(ISEQ), 0) + 1
+		  FROM TB_PROM_MAP
+		 WHERE IREF = #{ref} AND SDISP_YN = 'Y'
+	</select>
+
+	<!-- 법령별 현행분류 집계 — 게이트 판정 기준(Prom_SQL lawCurCateAgg 의 alias PR 판, 2026-07-08 성능 재작성:
+	     행별 상관 스칼라+CONNECT BY → 무상관 집합 1회 계산. 등가성 실DB 검증) -->
+	<sql id="lawCurCateAggPR">( SELECT pl.ILAW_ID, MAX(pl.ICATE_NO) KEEP (DENSE_RANK LAST ORDER BY pl.ILAW_NO, pl.IPROM_NO) CUR_CATE, MAX(pl.SGUBUN_ID) KEEP (DENSE_RANK LAST ORDER BY pl.ILAW_NO, pl.IPROM_NO) CUR_GUBUN FROM TB_PROM pl GROUP BY pl.ILAW_ID )</sql>
+
+	<!--
+	  front 규정목록 (레거시 getPromulgationList): 폴더(ref) 직속 규정 leaf 가 가리키는
+	  법령들의 현행본(SEXISTING_YN='Y'). 같은 ILAW_ID 묶음으로 현행을 찾는다.
+	-->
+	<select id="selectPromulgationList" resultMap="promMapFrontResult">
+		SELECT PR.IPROM_NO, PR.STITLE, PR.SPROM_DT, CA.SFULL_NAME, PR.SSYS_ID,
+		       CASE WHEN PR.SSTART_DT <![CDATA[ > ]]> TO_CHAR(SYSDATE, 'YYYY-MM-DD') THEN 'Y' ELSE 'N' END AS PENDING_YN
+		  FROM TB_PROM PR, TB_CATE CA
+		 WHERE PR.ILAW_ID IN (
+		         SELECT ILAW_ID FROM TB_PROM
+		          WHERE IPROM_NO IN (
+		                  SELECT IPROM_NO FROM TB_PROM_MAP
+		                   WHERE IREF = #{ref} AND SPROM_YN = 'Y' ) )
+		   AND PR.SEXISTING_YN = 'Y'
+		   <!-- 미종료 게이트(Prom_SQL notExpired 동일 — 2026-07-16 A안: 시행예정 포함, PENDING_YN 뱃지로 구분) -->
+		   AND ( PR.SNULL_DT IS NULL OR TRIM(PR.SNULL_DT) IS NULL OR PR.SNULL_DT = '--'
+		         OR PR.SNULL_DT <![CDATA[ >= ]]> TO_CHAR(SYSDATE, 'YYYY-MM-DD') )
+		   AND PR.ICATE_NO = CA.ICATE_NO
+		   <!-- 삭제분류 게이트: 현행분류(또는 조상)가 삭제(SDEL_YN='Y')된 법령은 트리에 없으므로 목록에서도 제외
+		        (2026-07-08 사용자 확정, Prom_SQL excludeDeletedCate 의 alias PR 판 — 무상관 집합 1회 계산) -->
+		   AND PR.ILAW_ID NOT IN (
+		       SELECT lcd.ILAW_ID FROM <include refid="lawCurCateAggPR"/> lcd
+		        WHERE lcd.CUR_CATE IN ( SELECT dd.ICATE_NO FROM TB_CATE dd
+		                                START WITH dd.SDEL_YN = 'Y'
+		                                CONNECT BY PRIOR dd.ICATE_NO = dd.IREF ) )
+		<!-- 분류/구분별 열람제한 게이트 (Prom_SQL cateReadGate 의 alias PR 판 — 유효기간 게이트와 같은 방식) -->
+		<if test="applyReadGate">
+		   AND ( PR.ILAW_ID NOT IN (
+		           SELECT lcr.ILAW_ID FROM <include refid="lawCurCateAggPR"/> lcr
+		            WHERE lcr.CUR_CATE IN (
+		                  SELECT rr.ICATE_NO FROM TB_CATE_READER rr
+		                  UNION
+		                  SELECT ca.ICATE_NO FROM TB_CATE ca
+		                   START WITH ca.ICATE_NO IN ( SELECT r.ICATE_NO FROM TB_CATE_READER r WHERE r.INHERIT_YN = 'Y' )
+		                   CONNECT BY PRIOR ca.ICATE_NO = ca.IREF )
+		               OR lcr.CUR_GUBUN IN ( SELECT gg.SGUBUN_ID FROM TB_GUBUN_READER gg ) )
+		      OR PR.ILAW_ID IN (
+		           SELECT lca.ILAW_ID FROM <include refid="lawCurCateAggPR"/> lca
+		            WHERE lca.CUR_CATE IN (
+		                  SELECT rm.ICATE_NO FROM TB_CATE_READER rm
+		                   WHERE ( ( rm.READER_TY = 'USER' AND rm.READER_ID = #{readerEsntlId} )
+		                        OR ( rm.READER_TY = 'DEPT' AND rm.READER_ID = #{readerOrgnztId} ) )
+		                  UNION
+		                  SELECT cm.ICATE_NO FROM TB_CATE cm
+		                   START WITH cm.ICATE_NO IN ( SELECT r2.ICATE_NO FROM TB_CATE_READER r2
+		                                                WHERE r2.INHERIT_YN = 'Y'
+		                                                  AND ( ( r2.READER_TY = 'USER' AND r2.READER_ID = #{readerEsntlId} )
+		                                                     OR ( r2.READER_TY = 'DEPT' AND r2.READER_ID = #{readerOrgnztId} ) ) )
+		                   CONNECT BY PRIOR cm.ICATE_NO = cm.IREF )
+		               OR lca.CUR_GUBUN IN (
+		                  SELECT g2.SGUBUN_ID FROM TB_GUBUN_READER g2
+		                   WHERE ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{readerEsntlId} )
+		                        OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{readerOrgnztId} ) ) ) ) )
+		</if>
+		 ORDER BY PR.IPROM_NO
+	</select>
+
+	<!-- 한 분류의 현행 법령 목록 (재귀 임포트용) -->
+	<select id="selectExistingPromsByCate" resultType="java.util.LinkedHashMap">
+		SELECT IPROM_NO AS "promNo", STITLE AS "title"
+		  FROM TB_PROM
+		 WHERE ICATE_NO = #{cateNo} AND SEXISTING_YN = 'Y'
+		 ORDER BY NVL(ISEQ, 9999), IPROM_NO
+	</select>
+
+	<!-- 신규 등록 (PK 는 Service 채번, SINS_DT 는 SYSDATE) -->
+	<insert id="insertMap">
+		INSERT INTO TB_PROM_MAP (
+			IPMAP_NO, SSYS_ID, SNAME, SFULL_NAME, SPROM_YN,
+			ILEVEL, IREF, SDISP_YN, ISEQ, SINS_DT, IPROM_NO
+		) VALUES (
+			#{pmapNo}, #{sysId}, #{name}, #{fullName}, #{promYn},
+			#{level}, #{ref}, #{dispYn}, #{seq},
+			TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS'), #{promNo}
+		)
+	</insert>
+
+	<!-- 노드명 변경 (레거시 updateDo) -->
+	<update id="updateMapName">
+		UPDATE TB_PROM_MAP SET SNAME = #{name} WHERE IPMAP_NO = #{pmapNo}
+	</update>
+
+	<!-- 단건 삭제 -->
+	<delete id="deleteMap">
+		DELETE FROM TB_PROM_MAP WHERE IPMAP_NO = #{pmapNo}
+	</delete>
+
+	<!-- 특정 법령을 가리키는 규정 leaf 전부 삭제 (deleteProm 연동) -->
+	<delete id="deleteMapByPromNo">
+		DELETE FROM TB_PROM_MAP WHERE IPROM_NO = #{promNo} AND SPROM_YN = 'Y'
+	</delete>
+
+</mapper>

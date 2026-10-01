@@ -1,0 +1,433 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/suit/Law_Suit_SQL_oracle.xml
+  사건 코어 (LAW_SUIT + 자식 4종 + 결과이력 + 심급·검색 모달) — LAW_MODULE_DESIGN.md §4.2·§7.1.
+  목록 14열은 자식 요약(원고/피고 대표·토지·최신 진행)을 집계 조인으로 동봉 — 행별 상관 서브쿼리 금지.
+-->
+<mapper namespace="narainet.law.suit.mapper.LawSuitMapper">
+
+	<sql id="listWhere">
+		WHERE S.DEL_YN = 'N'
+		<if test='searchFixFrom != null and searchFixFrom != ""'>
+		  AND S.DCSN_DT <![CDATA[>=]]> #{searchFixFrom}
+		</if>
+		<if test='searchFixTo != null and searchFixTo != ""'>
+		  AND S.DCSN_DT <![CDATA[<=]]> #{searchFixTo}
+		</if>
+		<if test='searchItpt != null and searchItpt != ""'>
+		  AND S.ITPT_KIND_CD = #{searchItpt}
+		</if>
+		<if test='searchCaseKind != null and searchCaseKind != ""'>
+		  AND S.CASE_KIND_CD = #{searchCaseKind}
+		</if>
+		<if test='searchRslt != null and searchRslt != ""'>
+		  AND S.RSLT_KIND_CD = #{searchRslt}
+		</if>
+		<if test='searchCaseYear != null and searchCaseYear != ""'>
+		  AND S.CASE_YEAR = #{searchCaseYear}
+		</if>
+		<if test='searchCaseSign != null and searchCaseSign != ""'>
+		  AND S.CASE_SIGN_CD = #{searchCaseSign}
+		</if>
+		<if test='searchCaseSerial != null and searchCaseSerial != ""'>
+		  AND S.CASE_SERIAL LIKE '%' || #{searchCaseSerial} || '%'
+		</if>
+	</sql>
+
+	<select id="selectSuitCnt" parameterType="narainet.law.suit.service.LawSuitVO" resultType="int">
+		SELECT COUNT(*)
+		  FROM LAW_SUIT S
+		<include refid="listWhere"/>
+	</select>
+
+	<select id="selectSuitList" parameterType="narainet.law.suit.service.LawSuitVO"
+	        resultType="narainet.law.suit.service.LawSuitVO">
+		SELECT *
+		  FROM (
+		        SELECT ROWNUM RN, A.*
+		          FROM (
+		                SELECT S.SUIT_ID        AS suitId,
+		                       S.FIRST_SUIT_ID  AS firstSuitId,
+		                       S.CASE_KIND_CD   AS caseKindCd,
+		                       CK.CODE_NM       AS caseKindNm,
+		                       S.INSTANCE_CD    AS instanceCd,
+		                       IC.CODE_NM       AS instanceNm,
+		                       S.COURT_NM       AS courtNm,
+		                       S.CASE_NO        AS caseNo,
+		                       S.CASE_NM        AS caseNm,
+		                       S.SUIT_AMT       AS suitAmt,
+		                       CASE WHEN LENGTH(S.FR_DT) = 8
+		                            THEN SUBSTR(S.FR_DT, 1, 4) || '-' || SUBSTR(S.FR_DT, 5, 2) || '-' || SUBSTR(S.FR_DT, 7, 2)
+		                            ELSE S.FR_DT END AS frDt,
+		                       CASE WHEN LENGTH(S.STC_DT) = 8
+		                            THEN SUBSTR(S.STC_DT, 1, 4) || '-' || SUBSTR(S.STC_DT, 5, 2) || '-' || SUBSTR(S.STC_DT, 7, 2)
+		                            ELSE S.STC_DT END AS stcDt,
+		                       S.DCSN_DT        AS dcsnDt,
+		                       S.RSLT_KIND_CD   AS rsltKindCd,
+		                       NVL(S.RSLT_KIND_NM, RS.CODE_NM) AS rsltDispNm,
+		                       S.WIN_AMT        AS winAmt,
+		                       S.LOSE_AMT       AS loseAmt,
+		                       P.NM             AS plaintiffNm,
+		                       NVL(P.CNT, 0)    AS plaintiffCnt,
+		                       D.NM             AS defendantNm,
+		                       NVL(D.CNT, 0)    AS defendantCnt,
+		                       L.SUMMARY        AS landSummary,
+		                       NVL(L.CNT, 0)    AS landCnt,
+		                       G.LATEST_DESC    AS progSummary
+		                  FROM LAW_SUIT S
+		                  LEFT OUTER JOIN COMTCCMMNDETAILCODE CK
+		                       ON CK.CODE_ID = 'LAW_CASE_KIND' AND CK.CODE = S.CASE_KIND_CD
+		                  LEFT OUTER JOIN COMTCCMMNDETAILCODE IC
+		                       ON IC.CODE_ID = 'LAW_INSTANCE' AND IC.CODE = S.INSTANCE_CD
+		                  LEFT OUTER JOIN COMTCCMMNDETAILCODE RS
+		                       ON RS.CODE_ID = 'LAW_RESULT' AND RS.CODE = S.RSLT_KIND_CD
+		                  LEFT OUTER JOIN (
+		                        SELECT SUIT_ID,
+		                               MAX(PARTY_NM) KEEP (DENSE_RANK FIRST ORDER BY SORT_ORDR, PARTY_ID) NM,
+		                               COUNT(*) CNT
+		                          FROM LAW_SUIT_PARTY
+		                         WHERE PARTY_TYPE = 'P'
+		                         GROUP BY SUIT_ID
+		                       ) P ON P.SUIT_ID = S.SUIT_ID
+		                  LEFT OUTER JOIN (
+		                        SELECT SUIT_ID,
+		                               MAX(PARTY_NM) KEEP (DENSE_RANK FIRST ORDER BY SORT_ORDR, PARTY_ID) NM,
+		                               COUNT(*) CNT
+		                          FROM LAW_SUIT_PARTY
+		                         WHERE PARTY_TYPE = 'D'
+		                         GROUP BY SUIT_ID
+		                       ) D ON D.SUIT_ID = S.SUIT_ID
+		                  LEFT OUTER JOIN (
+		                        SELECT SUIT_ID,
+		                               MAX(TRIM(LOCATION || ' ' || JIBUN)) KEEP (DENSE_RANK FIRST ORDER BY SORT_ORDR, LAND_ID) SUMMARY,
+		                               COUNT(*) CNT
+		                          FROM LAW_SUIT_LAND
+		                         GROUP BY SUIT_ID
+		                       ) L ON L.SUIT_ID = S.SUIT_ID
+		                  LEFT OUTER JOIN (
+		                        SELECT SUIT_ID,
+		                               MAX(PROG_DESC) KEEP (DENSE_RANK LAST ORDER BY PROG_DT, PROG_ID) LATEST_DESC
+		                          FROM LAW_SUIT_PROG
+		                         GROUP BY SUIT_ID
+		                       ) G ON G.SUIT_ID = S.SUIT_ID
+		                <include refid="listWhere"/>
+		                 ORDER BY S.SUIT_ID DESC
+		               ) A
+		         WHERE ROWNUM <![CDATA[<=]]> #{lastIndex}
+		       )
+		 WHERE RN <![CDATA[>]]> #{firstIndex}
+	</select>
+
+	<select id="selectSuit" resultType="narainet.law.suit.service.LawSuitVO">
+		SELECT S.SUIT_ID           AS suitId,
+		       S.FIRST_SUIT_ID     AS firstSuitId,
+		       S.CASE_KIND_CD      AS caseKindCd,
+		       CK.CODE_NM          AS caseKindNm,
+		       S.INSTANCE_CD       AS instanceCd,
+		       IC.CODE_NM          AS instanceNm,
+		       S.COURT_ID          AS courtId,
+		       S.COURT_NM          AS courtNm,
+		       S.CASE_YEAR         AS caseYear,
+		       S.CASE_SIGN_CD      AS caseSignCd,
+		       S.CASE_SERIAL       AS caseSerial,
+		       S.CASE_NO           AS caseNo,
+		       S.CASE_NM_CD        AS caseNmCd,
+		       S.CASE_NM           AS caseNm,
+		       S.CIVIL_CASE_CD     AS civilCaseCd,
+		       CC.CODE_NM          AS civilCaseNm,
+		       S.ITPT_KIND_CD      AS itptKindCd,
+		       IT.CODE_NM          AS itptKindNm,
+		       S.SUIT_AMT          AS suitAmt,
+		       S.OFFICE_RECEIPT_DT AS officeReceiptDt,
+		       S.FR_DT             AS frDt,
+		       S.STC_DT            AS stcDt,
+		       S.DCSN_DT           AS dcsnDt,
+		       S.RSLT_KIND_CD      AS rsltKindCd,
+		       S.RSLT_KIND_NM      AS rsltKindNm,
+		       NVL(S.RSLT_KIND_NM, RS.CODE_NM) AS rsltDispNm,
+		       S.WIN_AMT           AS winAmt,
+		       S.LOSE_AMT          AS loseAmt,
+		       S.LOSS_CAUSE_CD     AS lossCauseCd,
+		       LC.CODE_NM          AS lossCauseNm,
+		       S.MERGE_CASE        AS mergeCase,
+		       S.COST_FIX_DT       AS costFixDt,
+		       S.COST_FIX_AMT      AS costFixAmt,
+		       S.COST_RCV_AMT      AS costRcvAmt,
+		       S.RETAINER_AMT      AS retainerAmt,
+		       S.SUCCESS_AMT       AS successAmt,
+		       S.SPECIAL_DESC      AS specialDesc,
+		       S.DEL_YN            AS delYn,
+		       S.REG_USER_ID       AS regUserId,
+		       S.REG_DT            AS regDt,
+		       S.UPD_USER_ID       AS updUserId,
+		       S.UPD_DT            AS updDt
+		  FROM LAW_SUIT S
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE CK ON CK.CODE_ID = 'LAW_CASE_KIND' AND CK.CODE = S.CASE_KIND_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE IC ON IC.CODE_ID = 'LAW_INSTANCE' AND IC.CODE = S.INSTANCE_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE RS ON RS.CODE_ID = 'LAW_RESULT' AND RS.CODE = S.RSLT_KIND_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE CC ON CC.CODE_ID = 'LAW_CIVIL_CASE' AND CC.CODE = S.CIVIL_CASE_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE IT ON IT.CODE_ID = 'LAW_ITPT_KIND' AND IT.CODE = S.ITPT_KIND_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE LC ON LC.CODE_ID = 'LAW_LOSS_CAUSE' AND LC.CODE = S.LOSS_CAUSE_CD
+		 WHERE S.SUIT_ID = #{suitId}
+		   AND S.DEL_YN = 'N'
+	</select>
+
+	<insert id="insertSuit" parameterType="narainet.law.suit.service.LawSuitVO">
+		INSERT INTO LAW_SUIT (
+			SUIT_ID, FIRST_SUIT_ID, CASE_KIND_CD, INSTANCE_CD, COURT_ID, COURT_NM,
+			CASE_YEAR, CASE_SIGN_CD, CASE_SERIAL, CASE_NO, CASE_NM_CD, CASE_NM,
+			CIVIL_CASE_CD, ITPT_KIND_CD, SUIT_AMT, OFFICE_RECEIPT_DT, FR_DT, STC_DT, DCSN_DT,
+			RSLT_KIND_CD, RSLT_KIND_NM, WIN_AMT, LOSE_AMT, LOSS_CAUSE_CD, MERGE_CASE,
+			COST_FIX_DT, COST_FIX_AMT, COST_RCV_AMT, RETAINER_AMT, SUCCESS_AMT, SPECIAL_DESC,
+			DEL_YN, REG_USER_ID, REG_DT
+		) VALUES (
+			#{suitId}, #{firstSuitId}, #{caseKindCd}, #{instanceCd}, #{courtId}, #{courtNm},
+			#{caseYear}, #{caseSignCd}, #{caseSerial}, #{caseNo}, #{caseNmCd}, #{caseNm},
+			#{civilCaseCd}, #{itptKindCd}, #{suitAmt}, #{officeReceiptDt}, #{frDt}, #{stcDt}, #{dcsnDt},
+			#{rsltKindCd}, #{rsltKindNm}, #{winAmt}, #{loseAmt}, #{lossCauseCd}, #{mergeCase},
+			#{costFixDt}, #{costFixAmt}, #{costRcvAmt}, #{retainerAmt}, #{successAmt}, #{specialDesc},
+			'N', #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateSuit" parameterType="narainet.law.suit.service.LawSuitVO">
+		UPDATE LAW_SUIT
+		   SET CASE_KIND_CD      = #{caseKindCd},
+		       INSTANCE_CD       = #{instanceCd},
+		       COURT_ID          = #{courtId},
+		       COURT_NM          = #{courtNm},
+		       CASE_YEAR         = #{caseYear},
+		       CASE_SIGN_CD      = #{caseSignCd},
+		       CASE_SERIAL       = #{caseSerial},
+		       CASE_NO           = #{caseNo},
+		       CASE_NM_CD        = #{caseNmCd},
+		       CASE_NM           = #{caseNm},
+		       CIVIL_CASE_CD     = #{civilCaseCd},
+		       ITPT_KIND_CD      = #{itptKindCd},
+		       SUIT_AMT          = #{suitAmt},
+		       OFFICE_RECEIPT_DT = #{officeReceiptDt},
+		       FR_DT             = #{frDt},
+		       STC_DT            = #{stcDt},
+		       DCSN_DT           = #{dcsnDt},
+		       RSLT_KIND_CD      = #{rsltKindCd},
+		       RSLT_KIND_NM      = #{rsltKindNm},
+		       WIN_AMT           = #{winAmt},
+		       LOSE_AMT          = #{loseAmt},
+		       LOSS_CAUSE_CD     = #{lossCauseCd},
+		       MERGE_CASE        = #{mergeCase},
+		       COST_FIX_DT       = #{costFixDt},
+		       COST_FIX_AMT      = #{costFixAmt},
+		       COST_RCV_AMT      = #{costRcvAmt},
+		       RETAINER_AMT      = #{retainerAmt},
+		       SUCCESS_AMT       = #{successAmt},
+		       SPECIAL_DESC      = #{specialDesc},
+		       UPD_USER_ID       = #{updUserId},
+		       UPD_DT            = #{updDt}
+		 WHERE SUIT_ID = #{suitId}
+		   AND DEL_YN = 'N'
+	</update>
+
+	<update id="deleteSuit" parameterType="narainet.law.suit.service.LawSuitVO">
+		UPDATE LAW_SUIT
+		   SET DEL_YN      = 'Y',
+		       UPD_USER_ID = #{updUserId},
+		       UPD_DT      = #{updDt}
+		 WHERE SUIT_ID = #{suitId}
+	</update>
+
+	<!-- ── 당사자 ─────────────────────────────────────── -->
+	<select id="selectPartyList" resultType="narainet.law.suit.service.LawSuitPartyVO">
+		SELECT PARTY_ID  AS partyId,
+		       SUIT_ID   AS suitId,
+		       PARTY_TYPE AS partyType,
+		       PARTY_NM  AS partyNm,
+		       BIRTH     AS birth,
+		       JUMIN_ENC AS juminEnc,
+		       AGENT_NM  AS agentNm,
+		       SORT_ORDR AS sortOrdr
+		  FROM LAW_SUIT_PARTY
+		 WHERE SUIT_ID = #{suitId}
+		 ORDER BY DECODE(PARTY_TYPE, 'P', 1, 'D', 2, 3), SORT_ORDR, PARTY_ID
+	</select>
+
+	<delete id="deleteParties">
+		DELETE FROM LAW_SUIT_PARTY WHERE SUIT_ID = #{suitId}
+	</delete>
+
+	<insert id="insertParty" parameterType="narainet.law.suit.service.LawSuitPartyVO">
+		INSERT INTO LAW_SUIT_PARTY (
+			PARTY_ID, SUIT_ID, PARTY_TYPE, PARTY_NM, BIRTH, JUMIN_ENC, AGENT_NM, SORT_ORDR, REG_DT
+		) VALUES (
+			#{partyId}, #{suitId}, #{partyType}, #{partyNm}, #{birth}, #{juminEnc}, #{agentNm}, #{sortOrdr},
+			TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+		)
+	</insert>
+
+	<!-- ── 사건토지 ───────────────────────────────────── -->
+	<select id="selectLandList" resultType="narainet.law.suit.service.LawSuitLandVO">
+		SELECT LAND_ID   AS landId,
+		       SUIT_ID   AS suitId,
+		       LOCATION  AS location,
+		       JIBUN     AS jibun,
+		       SORT_ORDR AS sortOrdr
+		  FROM LAW_SUIT_LAND
+		 WHERE SUIT_ID = #{suitId}
+		 ORDER BY SORT_ORDR, LAND_ID
+	</select>
+
+	<delete id="deleteLands">
+		DELETE FROM LAW_SUIT_LAND WHERE SUIT_ID = #{suitId}
+	</delete>
+
+	<insert id="insertLand" parameterType="narainet.law.suit.service.LawSuitLandVO">
+		INSERT INTO LAW_SUIT_LAND (
+			LAND_ID, SUIT_ID, LOCATION, JIBUN, SORT_ORDR, REG_DT
+		) VALUES (
+			#{landId}, #{suitId}, #{location}, #{jibun}, #{sortOrdr}, TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+		)
+	</insert>
+
+	<!-- ── 소송수행자 ─────────────────────────────────── -->
+	<select id="selectStaffList" resultType="narainet.law.suit.service.LawSuitStaffVO">
+		SELECT T.STAFF_ID  AS staffId,
+		       T.SUIT_ID   AS suitId,
+		       T.ORGNZT_ID AS orgnztId,
+		       O.ORGNZT_NM AS orgnztNm,
+		       T.STAFF_NM  AS staffNm,
+		       T.ASSIGN_DT AS assignDt,
+		       T.SORT_ORDR AS sortOrdr
+		  FROM LAW_SUIT_STAFF T
+		  LEFT OUTER JOIN COMTNORGNZTINFO O ON O.ORGNZT_ID = T.ORGNZT_ID
+		 WHERE T.SUIT_ID = #{suitId}
+		 ORDER BY T.SORT_ORDR, T.STAFF_ID
+	</select>
+
+	<delete id="deleteStaffs">
+		DELETE FROM LAW_SUIT_STAFF WHERE SUIT_ID = #{suitId}
+	</delete>
+
+	<insert id="insertStaff" parameterType="narainet.law.suit.service.LawSuitStaffVO">
+		INSERT INTO LAW_SUIT_STAFF (
+			STAFF_ID, SUIT_ID, ORGNZT_ID, STAFF_NM, ASSIGN_DT, SORT_ORDR, REG_DT
+		) VALUES (
+			#{staffId}, #{suitId}, #{orgnztId}, #{staffNm}, #{assignDt}, #{sortOrdr}, TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+		)
+	</insert>
+
+	<!-- ── 진행상황·기일 ──────────────────────────────── -->
+	<select id="selectProgList" resultType="narainet.law.suit.service.LawSuitProgVO">
+		SELECT G.PROG_ID      AS progId,
+		       G.SUIT_ID      AS suitId,
+		       G.PROG_KIND_CD AS progKindCd,
+		       PK.CODE_NM     AS progKindNm,
+		       G.DYPR_KIND_CD AS dyprKindCd,
+		       DK.CODE_NM     AS dyprKindNm,
+		       G.PROG_DT      AS progDt,
+		       G.PROG_TM      AS progTm,
+		       G.PLACE        AS place,
+		       G.PROG_DESC    AS progDesc,
+		       G.STAT_CD      AS statCd,
+		       ST.CODE_NM     AS statNm,
+		       G.RESULT_DESC  AS resultDesc
+		  FROM LAW_SUIT_PROG G
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE PK ON PK.CODE_ID = 'LAW_PROG_KIND' AND PK.CODE = G.PROG_KIND_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE DK ON DK.CODE_ID = 'LAW_DYPR_KIND' AND DK.CODE = G.DYPR_KIND_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE ST ON ST.CODE_ID = 'LAW_PROG_STAT' AND ST.CODE = G.STAT_CD
+		 WHERE G.SUIT_ID = #{suitId}
+		 ORDER BY G.PROG_DT, G.PROG_TM, G.PROG_ID
+	</select>
+
+	<delete id="deleteProgs">
+		DELETE FROM LAW_SUIT_PROG WHERE SUIT_ID = #{suitId}
+	</delete>
+
+	<insert id="insertProg" parameterType="narainet.law.suit.service.LawSuitProgVO">
+		INSERT INTO LAW_SUIT_PROG (
+			PROG_ID, SUIT_ID, PROG_KIND_CD, DYPR_KIND_CD, PROG_DT, PROG_TM,
+			PLACE, PROG_DESC, STAT_CD, RESULT_DESC, REG_DT
+		) VALUES (
+			#{progId}, #{suitId}, #{progKindCd}, #{dyprKindCd}, #{progDt}, #{progTm},
+			#{place}, #{progDesc}, #{statCd}, #{resultDesc}, TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+		)
+	</insert>
+
+	<!-- ── 결과변경 이력 ──────────────────────────────── -->
+	<select id="selectRsltHistList" resultType="narainet.law.suit.service.LawSuitRsltHistVO">
+		SELECT H.HIST_ID      AS histId,
+		       H.SUIT_ID      AS suitId,
+		       H.HIST_SEQ     AS histSeq,
+		       H.RSLT_KIND_CD AS rsltKindCd,
+		       H.RSLT_KIND_NM AS rsltKindNm,
+		       NVL(H.RSLT_KIND_NM, RS.CODE_NM) AS rsltDispNm,
+		       H.END_DT       AS endDt,
+		       H.HIST_DESC    AS histDesc,
+		       H.REG_USER_ID  AS regUserId,
+		       H.REG_DT       AS regDt
+		  FROM LAW_SUIT_RSLT_HIST H
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE RS ON RS.CODE_ID = 'LAW_RESULT' AND RS.CODE = H.RSLT_KIND_CD
+		 WHERE H.SUIT_ID = #{suitId}
+		 ORDER BY H.HIST_SEQ DESC
+	</select>
+
+	<select id="selectMaxHistSeq" resultType="int">
+		SELECT NVL(MAX(HIST_SEQ), 0)
+		  FROM LAW_SUIT_RSLT_HIST
+		 WHERE SUIT_ID = #{suitId}
+	</select>
+
+	<insert id="insertRsltHist" parameterType="narainet.law.suit.service.LawSuitRsltHistVO">
+		INSERT INTO LAW_SUIT_RSLT_HIST (
+			HIST_ID, SUIT_ID, HIST_SEQ, RSLT_KIND_CD, RSLT_KIND_NM, END_DT, HIST_DESC, REG_USER_ID, REG_DT
+		) VALUES (
+			#{histId}, #{suitId}, #{histSeq}, #{rsltKindCd}, #{rsltKindNm}, #{endDt}, #{histDesc}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<!-- ── 심급(사건군) 그리드 · 사건 검색 모달 ─────────── -->
+	<select id="selectInstanceSuits" resultType="narainet.law.suit.service.LawSuitVO">
+		SELECT S.SUIT_ID     AS suitId,
+		       S.INSTANCE_CD AS instanceCd,
+		       IC.CODE_NM    AS instanceNm,
+		       S.COURT_NM    AS courtNm,
+		       S.CASE_NO     AS caseNo,
+		       S.CASE_NM     AS caseNm,
+		       S.FR_DT       AS frDt,
+		       S.STC_DT      AS stcDt,
+		       NVL(S.RSLT_KIND_NM, RS.CODE_NM) AS rsltDispNm
+		  FROM LAW_SUIT S
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE IC ON IC.CODE_ID = 'LAW_INSTANCE' AND IC.CODE = S.INSTANCE_CD
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE RS ON RS.CODE_ID = 'LAW_RESULT' AND RS.CODE = S.RSLT_KIND_CD
+		 WHERE S.FIRST_SUIT_ID = #{firstSuitId}
+		   AND S.DEL_YN = 'N'
+		 ORDER BY S.SUIT_ID
+	</select>
+
+	<select id="searchSuits" resultType="narainet.law.suit.service.LawSuitVO">
+		SELECT *
+		  FROM (
+		        SELECT S.SUIT_ID       AS suitId,
+		               S.FIRST_SUIT_ID AS firstSuitId,
+		               S.CASE_KIND_CD  AS caseKindCd,
+		               S.INSTANCE_CD   AS instanceCd,
+		               IC.CODE_NM      AS instanceNm,
+		               S.COURT_ID      AS courtId,
+		               S.COURT_NM      AS courtNm,
+		               S.CASE_NO       AS caseNo,
+		               S.CASE_NM_CD    AS caseNmCd,
+		               S.CASE_NM       AS caseNm,
+		               S.CIVIL_CASE_CD AS civilCaseCd,
+		               S.ITPT_KIND_CD  AS itptKindCd,
+		               S.SUIT_AMT      AS suitAmt
+		          FROM LAW_SUIT S
+		          LEFT OUTER JOIN COMTCCMMNDETAILCODE IC ON IC.CODE_ID = 'LAW_INSTANCE' AND IC.CODE = S.INSTANCE_CD
+		         WHERE S.DEL_YN = 'N'
+		        <if test='keyword != null and keyword != ""'>
+		           AND (S.CASE_NO LIKE '%' || #{keyword} || '%' OR S.CASE_NM LIKE '%' || #{keyword} || '%')
+		        </if>
+		         ORDER BY S.SUIT_ID DESC
+		       )
+		 WHERE ROWNUM <![CDATA[<=]]> 20
+	</select>
+
+</mapper>

@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/search/UnifiedSearch_SQL_maria.xml
+
+  통합검색 (사용자 화면 전용 — 현행/유효기간/열람제한 게이트 규정 축 적용).
+   ① 규정 제목  : TB_PROM 현행(SEXISTING_YN='Y') 공백무시 LIKE, 정확>선두>포함 정렬
+   ② 조문      : TB_PROV_VRSN Oracle Text(누적 최신회차 — RLMS 저장분, 성장형)
+                  UNION 레거시 조문 제목경로(TB_SRC_STORED.SFULL_TITLE — 전 규정 커버, 본문 CLOB은 동결/NULL)
+   ③ 별표서식  : TB_DOCU 누적 최신본(SITEM별 MAX(ILAW_NO<=현행)) 제목/그룹제목
+   ④ 자료      : TB_REL_FILE/TB_REL_WORD 제목 + WORD 자체변환 본문(SSEARCH_TEXT, 신규 업로드분)
+   ⑤ 게시판    : COMTNBBS 제목·본문(CLOB) — 대상 게시판은 서비스가 bbsIds 로 주입(노출설정+열람권한)
+   ⑥ FAQ       : COMTNFAQINFO 질문제목·질문내용·답변내용
+  공통: 결과는 항상 그 법령의 '현행 회차(cur)' 로 딥링크. 열람제한(TB_CATE_READER+TB_GUBUN_READER)과
+  유효기간 게이트는 alias 치환 프래그먼트(<include><property name="ga"/>)로 축마다 재사용.
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.search.mapper.UnifiedSearchMapper">
+
+	<!-- 공백무시 키워드 매칭 — 대상컬럼은 ${col} 치환 -->
+	<sql id="kwMatch">
+		UPPER(REPLACE(${col}, ' ', '')) LIKE '%' || UPPER(REPLACE(#{keyword}, ' ', '')) || '%'
+	</sql>
+
+	<!-- 유효기간 게이트 (미종료만) — 규정 별칭 ${ga}.
+	     2026-07-16 A안: 시행일 도래 요구 삭제 — 공포(승인)된 규정은 시행 전에도 전 축 검색 노출,
+	     규정 축 행에 "시행예정" 뱃지 표시(Prom_SQL notExpired 와 동일 정책). -->
+	<sql id="effective">
+		<!-- Oracle 은 공백문자열 TRIM 결과가 NULL — MariaDB 는 '' 이므로 = '' 비교로 등가 유지 -->
+		AND ( ${ga}.SNULL_DT IS NULL OR TRIM(${ga}.SNULL_DT) = '' OR ${ga}.SNULL_DT = '--'
+		      OR ${ga}.SNULL_DT <![CDATA[ >= ]]> TO_CHAR(SYSDATE(), 'YYYY-MM-DD') )
+	</sql>
+
+	<!-- 법령별 현행분류 집계 — 열람제한/삭제분류 게이트의 판정 기준(Prom_SQL lawCurCateAgg 동일).
+	     회차 간 분류 발산 시 과거 회차/누적 회차 행이 옛 분류로 우회하지 못하게 법령 단위 판정(2026-07-08).
+	     ★성능(2026-07-08 재작성): 행별 상관 스칼라+CONNECT BY → 무상관 집합 1회 계산(등가성 실DB 검증).
+	     ※ ${ga} 테이블은 ILAW_ID/SGUBUN_ID 가 NULL 일 수 있어(레거시 축) IS NULL 통과 가드 포함 — 구형 동일 의미. -->
+	<sql id="lawCurCateAgg">( SELECT rk.ILAW_ID, rk.ICATE_NO CUR_CATE, rk.SGUBUN_ID CUR_GUBUN FROM ( SELECT pl.ILAW_ID, pl.ICATE_NO, pl.SGUBUN_ID, ROW_NUMBER() OVER (PARTITION BY pl.ILAW_ID ORDER BY pl.ILAW_NO DESC, pl.IPROM_NO DESC) RNK FROM TB_PROM pl ) rk WHERE rk.RNK = 1 )</sql>
+
+	<!-- 법령별 현행회차 집계 — draft(미승인 최신 회차) 상한 판정 기준(2026-07-10). 조문 본문축(provsBody)의
+	     누적최신 판정이 현행(SEXISTING_YN='Y')을 넘는 draft 회차를 포함하지 않도록 법령당 현행 최대 ILAW_NO 제공.
+	     별표축(docusWhere)의 cur.ILAW_NO 상한과 동형 — 무상관 집합 1회(행별 상관쿼리 0, 398612e 원칙).
+	     통합검색은 front 전용이라 역할 무관 무조건 적용(별표/자료축과 동일 관행 — 관리자 겸용인
+	     ProvVrsn 클론은 비면제만 적용으로 정책이 다름).
+	     ★로직 변경 시 동시 수정: ProvVrsn_SQL curNoAggPR(로컬 클론 — 크로스 네임스페이스 include 함정 회피) -->
+	<sql id="curNoAgg">( SELECT c.ILAW_ID, MAX(c.ILAW_NO) CUR_NO FROM TB_PROM c WHERE c.SEXISTING_YN = 'Y' AND c.SDISP_YN = 'Y' GROUP BY c.ILAW_ID )</sql>
+
+	<!-- 삭제분류 게이트 — 현행분류(또는 조상)가 삭제(SDEL_YN='Y')된 법령은 트리에 없으므로 검색에서도 제외
+	     (2026-07-08 사용자 확정, Prom_SQL excludeDeletedCate 의 별칭 ${ga} 치환형) -->
+	<sql id="excludeDeletedCate">
+		AND ( ${ga}.ILAW_ID IS NULL OR ${ga}.ILAW_ID NOT IN (
+			SELECT lcd.ILAW_ID FROM <include refid="lawCurCateAgg"/> lcd
+			 WHERE lcd.CUR_CATE IN ( SELECT dtd.ICATE_NO FROM ( WITH RECURSIVE crd AS (
+			                             SELECT dd.ICATE_NO FROM TB_CATE dd WHERE dd.SDEL_YN = 'Y'
+			                             UNION ALL
+			                             SELECT ch.ICATE_NO FROM TB_CATE ch JOIN crd ON ch.IREF = crd.ICATE_NO )
+			                             SELECT ICATE_NO FROM crd ) dtd ) ) )
+	</sql>
+
+	<!-- 숨김 구분 게이트 — 구분(ccm 'SGUBUN') USE_AT='N' 규정 제외. 역할 면제 없음(전역 스위치,
+	     2026-07-09 사용자 확정). Prom_SQL excludeHiddenGubun 의 별칭 ${ga} 치환형.
+	     SGUBUN_ID NULL(레거시 축)은 NOT EXISTS 로 자연 통과. -->
+	<sql id="excludeHiddenGubun">
+		AND NOT EXISTS ( SELECT 1 FROM COMTCCMMNDETAILCODE hg
+		                  WHERE hg.CODE_ID = 'SGUBUN' AND hg.CODE = ${ga}.SGUBUN_ID AND hg.USE_AT = 'N' )
+	</sql>
+
+	<!-- 분류/구분 열람제한 게이트 (Prom_SQL cateReadGate 동일 논리, 별칭 ${ga} 치환형).
+	     구분 축 = 법령 현행(최신 회차) 구분(CUR_GUBUN) — 2026-07-20 행 기준에서 통일 -->
+	<sql id="readGate">
+		<if test="applyReadGate">
+		AND ( ( ${ga}.ILAW_ID IS NULL OR ${ga}.ILAW_ID NOT IN (
+				SELECT lcr.ILAW_ID FROM <include refid="lawCurCateAgg"/> lcr
+				 WHERE lcr.CUR_CATE IN (
+				       SELECT rr.ICATE_NO FROM TB_CATE_READER rr
+				       UNION
+				       SELECT dt1.ICATE_NO FROM ( WITH RECURSIVE cr1 AS (
+				           SELECT ca.ICATE_NO FROM TB_CATE ca
+				            WHERE ca.ICATE_NO IN ( SELECT r.ICATE_NO FROM TB_CATE_READER r WHERE r.INHERIT_YN = 'Y' )
+				           UNION ALL
+				           SELECT ch.ICATE_NO FROM TB_CATE ch JOIN cr1 ON ch.IREF = cr1.ICATE_NO )
+				           SELECT ICATE_NO FROM cr1 ) dt1 )
+				    OR lcr.CUR_GUBUN IN ( SELECT gg.SGUBUN_ID FROM TB_GUBUN_READER gg ) ) )
+		   OR ${ga}.ILAW_ID IN (
+				SELECT lca.ILAW_ID FROM <include refid="lawCurCateAgg"/> lca
+				 WHERE lca.CUR_CATE IN (
+				       SELECT rm.ICATE_NO FROM TB_CATE_READER rm
+				        WHERE ( ( rm.READER_TY = 'USER' AND rm.READER_ID = #{readerEsntlId} )
+				             OR ( rm.READER_TY = 'DEPT' AND rm.READER_ID = #{readerOrgnztId} ) )
+				       UNION
+				       SELECT dt2.ICATE_NO FROM ( WITH RECURSIVE cr2 AS (
+				           SELECT cm.ICATE_NO FROM TB_CATE cm
+				            WHERE cm.ICATE_NO IN ( SELECT r2.ICATE_NO FROM TB_CATE_READER r2
+				                                    WHERE r2.INHERIT_YN = 'Y'
+				                                      AND ( ( r2.READER_TY = 'USER' AND r2.READER_ID = #{readerEsntlId} )
+				                                         OR ( r2.READER_TY = 'DEPT' AND r2.READER_ID = #{readerOrgnztId} ) ) )
+				           UNION ALL
+				           SELECT ch.ICATE_NO FROM TB_CATE ch JOIN cr2 ON ch.IREF = cr2.ICATE_NO )
+				           SELECT ICATE_NO FROM cr2 ) dt2 )
+				    OR lca.CUR_GUBUN IN (
+				       SELECT g2.SGUBUN_ID FROM TB_GUBUN_READER g2
+				        WHERE ( ( g2.READER_TY = 'USER' AND g2.READER_ID = #{readerEsntlId} )
+				             OR ( g2.READER_TY = 'DEPT' AND g2.READER_ID = #{readerOrgnztId} ) ) ) ) )
+		</if>
+	</sql>
+
+	<!-- 구분(gubunIds=SGUBUN_ID 코드 목록)/분류(cateNo 서브트리) 필터 — 좌측 분류트리 연동, 규정 별칭 ${ga}.
+	     옛 gubun1~5='TRUE' 방식 폐기(2026-07-10 동적화) — 신설 구분(FT_GUBUN_6+)도 코드 그대로 통과. -->
+	<sql id="gubunCateFilter">
+		<if test="gubunIds != null and !gubunIds.isEmpty()">
+			AND ${ga}.SGUBUN_ID IN
+			<foreach collection="gubunIds" item="g" open="(" separator="," close=")">#{g}</foreach>
+		</if>
+		<if test="cateNo != null">
+			AND ${ga}.ICATE_NO IN ( WITH RECURSIVE crc AS (
+				SELECT ICATE_NO FROM TB_CATE WHERE ICATE_NO = #{cateNo}
+				UNION ALL
+				SELECT ch.ICATE_NO FROM TB_CATE ch JOIN crc ON ch.IREF = crc.ICATE_NO )
+				SELECT ICATE_NO FROM crc )
+		</if>
+	</sql>
+
+	<!-- ═══ ① 규정(현행) 제목 ═══ -->
+	<sql id="promsWhere">
+		 WHERE p.SDISP_YN = 'Y'
+		   AND p.SEXISTING_YN = 'Y'
+		   AND <include refid="kwMatch"><property name="col" value="p.STITLE"/></include>
+		<!-- 공포일 범위 — 홈 검색 콘솔의 날짜조건(규정 축에만 적용) -->
+		<if test="searchFromDt != null and searchFromDt != ''">
+		   <![CDATA[ AND p.SPROM_DT >= #{searchFromDt} ]]>
+		</if>
+		<if test="searchToDt != null and searchToDt != ''">
+		   <![CDATA[ AND p.SPROM_DT <= #{searchToDt} ]]>
+		</if>
+		<include refid="gubunCateFilter"><property name="ga" value="p"/></include>
+		<include refid="effective"><property name="ga" value="p"/></include>
+		<include refid="excludeDeletedCate"><property name="ga" value="p"/></include>
+		<include refid="excludeHiddenGubun"><property name="ga" value="p"/></include>
+		<include refid="readGate"><property name="ga" value="p"/></include>
+	</sql>
+
+	<select id="searchProms" parameterType="map" resultType="java.util.LinkedHashMap">
+		
+			SELECT p.IPROM_NO AS "promNo", p.STITLE AS "title", p.SPROM_DT AS "promDate",
+			       p.SSTART_DT AS "startDate", p.ILAW_NO AS "lawNo", p.SURL AS "url",
+			       c.SNAME AS "cateNm", b.ORGNZT_NM AS "buseoNm",
+			       CASE WHEN p.SSTART_DT <![CDATA[ > ]]> TO_CHAR(SYSDATE(), 'YYYY-MM-DD') THEN 'Y' ELSE 'N' END AS "pendingYn"
+			  FROM TB_PROM p
+			  LEFT OUTER JOIN TB_CATE c ON p.ICATE_NO = c.ICATE_NO
+			  LEFT OUTER JOIN COMTNORGNZTINFO b ON b.ORGNZT_ID = NVL(p.SBUSEO_ORGNZT_ID, 'ORG_' || LPAD(p.IBUSEO_NO, 16, '0'))
+			<include refid="promsWhere"/>
+			 ORDER BY CASE WHEN UPPER(REPLACE(p.STITLE, ' ', '')) = UPPER(REPLACE(#{keyword}, ' ', '')) THEN 0
+			               WHEN UPPER(REPLACE(p.STITLE, ' ', '')) LIKE UPPER(REPLACE(#{keyword}, ' ', '')) || '%' THEN 1
+			               ELSE 2 END,
+			          p.STITLE, p.IPROM_NO
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="countProms" parameterType="map" resultType="int">
+		SELECT COUNT(*)
+		  FROM TB_PROM p
+		<include refid="promsWhere"/>
+	</select>
+
+	<!-- ═══ ② 조문 — Oracle Text 본문(누적 최신회차) UNION 레거시 제목경로 ═══ -->
+	<sql id="provsBody">
+		SELECT PV.IPROM_NO AS "promNo", PR.STITLE AS "promTitle",
+		       <!-- 조 제목 없으면 '제N조(의M)' 합성 — SITEM/SSUB_ITEM 은 제로패딩 VARCHAR2('001','00') → TO_NUMBER 로 패딩 제거 -->
+		       CASE WHEN PV.STITLE IS NOT NULL THEN PV.STITLE
+		            WHEN PV.SITEM IS NOT NULL AND (PV.SITEM REGEXP '^[0-9]+$')
+		                 THEN '제' || CAST(PV.SITEM AS UNSIGNED) || '조' ||
+		                      CASE WHEN (NVL(PV.SSUB_ITEM, '0') REGEXP '^0*[1-9][0-9]*$')
+		                           THEN '의' || CAST(PV.SSUB_ITEM AS UNSIGNED) ELSE '' END
+		            WHEN PV.SITEM IS NOT NULL THEN '제' || PV.SITEM || '조'
+		            ELSE '조문' END AS "hitTitle",
+		       PV.SITEM AS "item", PV.SSUB_ITEM AS "subItem",
+		       SUBSTRING(PV.SCONTENTS, 1, 160) AS "snippet",
+		       1 AS "rank", 'BODY' AS "src"
+		  FROM TB_PROV_VRSN PV, TB_PROM PR, <include refid="curNoAgg"/> cn
+		 WHERE PV.IPROM_NO = PR.IPROM_NO
+		   AND cn.ILAW_ID = PR.ILAW_ID
+		   <!-- Oracle Text CONTAINS → INSTR 부분일치(MariaDB 전문색인 미사용 설계).
+		        ftKeyword 는 Oracle Text 용 {} 래핑이라 원본 keyword 를 쓴다. -->
+		   AND INSTR(PV.SCONTENTS, #{keyword}) <![CDATA[ > ]]> 0
+		   AND NVL(PV.SDISP_YN, 'Y') = 'Y'
+		<!-- draft 상한(2026-07-10): 미승인 draft 회차(현행 초과 ILAW_NO)의 조문 스니펫 누설 봉합 —
+		     별표축(docusWhere) ILAW_NO<=cur 상한과 동형. ★누적최신 MAX 서브쿼리에도 동일 상한 필수
+		     (없으면 draft 가 MAX 를 차지해 승인본 조문이 검색에서 증발) -->
+		   <![CDATA[ AND PR.ILAW_NO <= cn.CUR_NO ]]>
+		   AND PR.ILAW_NO = (
+		       SELECT MAX(PR2.ILAW_NO)
+		         FROM TB_PROV_VRSN PV2, TB_PROM PR2
+		        WHERE PV2.IPROM_NO = PR2.IPROM_NO
+		          AND PR2.ILAW_ID  = PR.ILAW_ID
+		          AND PV2.SFULL_ITEM = PV.SFULL_ITEM
+		          <![CDATA[ AND PR2.ILAW_NO <= cn.CUR_NO ]]>
+		   )
+		<!-- 현행회차 존재+유효 게이트 — 다른 축(제목/별표/자료)과 정합: 만료·현행부재 법령의 조문 본문 히트 제외(2026-07-08 교정) -->
+		AND EXISTS ( SELECT 1 FROM TB_PROM cur
+		              WHERE cur.ILAW_ID = PR.ILAW_ID
+		                AND cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y'
+		                <include refid="effective"><property name="ga" value="cur"/></include> )
+		<include refid="gubunCateFilter"><property name="ga" value="PR"/></include>
+		<include refid="excludeDeletedCate"><property name="ga" value="PR"/></include>
+		<include refid="excludeHiddenGubun"><property name="ga" value="PR"/></include>
+		<include refid="readGate"><property name="ga" value="PR"/></include>
+	</sql>
+
+	<sql id="provsTitle">
+		SELECT cur.IPROM_NO AS "promNo", cur.STITLE AS "promTitle",
+		       <!-- SFULL_TITLE 은 레거시가 HTML 엔티티 포함 저장("규정명 &amp;gt; 제N조") — 표시 전 디코드(&amp; 는 마지막) -->
+		       <![CDATA[ REPLACE(REPLACE(REPLACE(s.SFULL_TITLE, '&lt;', '<'), '&gt;', '>'), '&amp;', '&') ]]> AS "hitTitle",
+		       NULL AS "item", NULL AS "subItem",
+		       NULL AS "snippet",
+		       0 AS "rank", 'TITLE' AS "src"
+		  FROM TB_SRC_STORED s
+		  JOIN TB_PROM cur ON cur.ILAW_ID = s.ILAW_ID
+		       AND cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y'
+		 WHERE s.SFLAG = '조문'
+		   AND <include refid="kwMatch"><property name="col" value="s.SFULL_TITLE"/></include>
+		<include refid="gubunCateFilter"><property name="ga" value="cur"/></include>
+		<include refid="effective"><property name="ga" value="cur"/></include>
+		<include refid="excludeDeletedCate"><property name="ga" value="cur"/></include>
+		<include refid="excludeHiddenGubun"><property name="ga" value="cur"/></include>
+		<include refid="readGate"><property name="ga" value="cur"/></include>
+	</sql>
+
+	<select id="searchProvs" parameterType="map" resultType="java.util.LinkedHashMap">
+		
+			SELECT * FROM (
+				<if test="ftKeyword != null">
+				<include refid="provsBody"/>
+				UNION ALL
+				</if>
+				<include refid="provsTitle"/>
+			) X
+			 ORDER BY "rank" DESC, "src", "promTitle", "hitTitle"
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="countProvs" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			<if test="ftKeyword != null">
+			<include refid="provsBody"/>
+			UNION ALL
+			</if>
+			<include refid="provsTitle"/>
+		) X
+	</select>
+
+	<!-- ═══ ③ 별표/별지서식 — TB_DOCU 누적 최신본 ═══ -->
+	<sql id="docusWhere">
+		  FROM TB_DOCU d
+		  JOIN TB_PROM dp  ON dp.IPROM_NO = d.IPROM_NO
+		  JOIN TB_PROM cur ON cur.ILAW_ID = dp.ILAW_ID
+		       AND cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y'
+		 WHERE NVL(d.SDISP_YN, 'Y') = 'Y'
+		   AND NVL(d.SGAEJUNG_TYPE, 'NEW') NOT LIKE 'NULLIFY%'
+		   AND ( <include refid="kwMatch"><property name="col" value="d.STITLE"/></include>
+		      OR <include refid="kwMatch"><property name="col" value="d.SGRP_TITLE"/></include> )
+		   <![CDATA[ AND dp.ILAW_NO <= cur.ILAW_NO ]]>
+		   AND dp.ILAW_NO = (
+		       SELECT MAX(dp2.ILAW_NO)
+		         FROM TB_DOCU d2, TB_PROM dp2
+		        WHERE d2.IPROM_NO = dp2.IPROM_NO
+		          AND dp2.ILAW_ID = dp.ILAW_ID
+		          AND d2.SITEM = d.SITEM
+		          <![CDATA[ AND dp2.ILAW_NO <= cur.ILAW_NO ]]>
+		   )
+		<include refid="gubunCateFilter"><property name="ga" value="cur"/></include>
+		<include refid="effective"><property name="ga" value="cur"/></include>
+		<include refid="excludeDeletedCate"><property name="ga" value="cur"/></include>
+		<include refid="excludeHiddenGubun"><property name="ga" value="cur"/></include>
+		<include refid="readGate"><property name="ga" value="cur"/></include>
+	</sql>
+
+	<select id="searchDocus" parameterType="map" resultType="java.util.LinkedHashMap">
+		
+			SELECT d.IDOCU_NO AS "docuNo", d.STITLE AS "title", TRIM(d.SGRP_TITLE) AS "grpTitle",
+			       cur.IPROM_NO AS "promNo", cur.STITLE AS "promTitle"
+			<include refid="docusWhere"/>
+			 ORDER BY cur.STITLE, d.SITEM
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="countDocus" parameterType="map" resultType="int">
+		SELECT COUNT(*)
+		<include refid="docusWhere"/>
+	</select>
+
+	<!-- ═══ ④ 자료 — 관련자료 FILE/WORD 제목 + WORD 자체변환 본문(신규분) ═══
+	     ★뷰어 일치(2026-07-07 사용자 확정): 현행 뷰어 관련자료 패널의 누적 규칙
+	       (RelVrsn selectByPromCumulative 미러 — ICTNS_ID별 최신 회차≤현행, SVRSN_YN 상속,
+	        전면개정(SDIFF_YN='N') 하한, SFLAG=PROMULGATION)을 통과한 마스터의 자식만 히트.
+	       과거 회차 전용/대체된 자료는 뷰어에 없으므로 검색에서도 제외. -->
+	<sql id="relMasterCurrent">
+		   AND ( v.SFLAG IS NULL OR v.SFLAG = 'PROMULGATION' )
+		   <![CDATA[ AND pr.ILAW_NO <= cur.ILAW_NO ]]>
+		   AND ( ( pr.ILAW_NO = cur.ILAW_NO AND NVL(v.SVRSN_YN, 'N') = 'N' )
+		      OR v.SVRSN_YN = 'Y' )
+		   <![CDATA[ AND pr.ILAW_NO >= ]]> NVL( ( SELECT MAX(pn.ILAW_NO)
+		         FROM TB_PROM pn, TB_GAEJUNG gn
+		        WHERE pn.ILAW_ID = cur.ILAW_ID
+		          <![CDATA[ AND pn.ILAW_NO <= cur.ILAW_NO ]]>
+		          AND gn.IGAEJUNG_NO = pn.IGAEJUNG_NO
+		          AND gn.SDIFF_YN = 'N' AND gn.SDEL_YN = 'N' ), 0 )
+		   AND pr.ILAW_NO = ( SELECT MAX(pr2.ILAW_NO)
+		         FROM TB_REL_VRSN v2, TB_PROM pr2
+		        WHERE v2.IPROM_NO = pr2.IPROM_NO
+		          AND pr2.ILAW_ID = cur.ILAW_ID
+		          <![CDATA[ AND pr2.ILAW_NO <= cur.ILAW_NO ]]>
+		          <![CDATA[ AND pr2.ILAW_NO >= ]]> NVL( ( SELECT MAX(pn2.ILAW_NO)
+		                FROM TB_PROM pn2, TB_GAEJUNG gn2
+		               WHERE pn2.ILAW_ID = cur.ILAW_ID
+		                 <![CDATA[ AND pn2.ILAW_NO <= cur.ILAW_NO ]]>
+		                 AND gn2.IGAEJUNG_NO = pn2.IGAEJUNG_NO
+		                 AND gn2.SDIFF_YN = 'N' AND gn2.SDEL_YN = 'N' ), 0 )
+		          AND ( v2.SFLAG IS NULL OR v2.SFLAG = 'PROMULGATION' )
+		          AND v2.ICTNS_ID = v.ICTNS_ID )
+	</sql>
+
+	<sql id="relsUnion">
+		SELECT DISTINCT 'FILE' AS "kind", f.STITLE AS "title", NULL AS "snippet",
+		       cur.IPROM_NO AS "promNo", cur.STITLE AS "promTitle"
+		  FROM TB_PROM cur
+		  JOIN TB_PROM pr ON pr.ILAW_ID = cur.ILAW_ID
+		  JOIN TB_REL_VRSN v ON v.IPROM_NO = pr.IPROM_NO
+		  JOIN TB_REL_FILE f ON f.IRVRSN_NO = v.IRVRSN_NO
+		 WHERE cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y'
+		   AND NVL(f.SDEL_YN, 'N') = 'N'
+		   AND <include refid="kwMatch"><property name="col" value="f.STITLE"/></include>
+		<include refid="relMasterCurrent"/>
+		<include refid="gubunCateFilter"><property name="ga" value="cur"/></include>
+		<include refid="effective"><property name="ga" value="cur"/></include>
+		<include refid="excludeDeletedCate"><property name="ga" value="cur"/></include>
+		<include refid="excludeHiddenGubun"><property name="ga" value="cur"/></include>
+		<include refid="readGate"><property name="ga" value="cur"/></include>
+		UNION ALL
+		SELECT DISTINCT 'WORD' AS "kind", w.STITLE AS "title",
+		       SUBSTRING(w.SSEARCH_TEXT, 1, 160) AS "snippet",
+		       cur.IPROM_NO AS "promNo", cur.STITLE AS "promTitle"
+		  FROM TB_PROM cur
+		  JOIN TB_PROM pr ON pr.ILAW_ID = cur.ILAW_ID
+		  JOIN TB_REL_VRSN v ON v.IPROM_NO = pr.IPROM_NO
+		  JOIN TB_REL_WORD w ON w.IRVRSN_NO = v.IRVRSN_NO
+		 WHERE cur.SEXISTING_YN = 'Y' AND cur.SDISP_YN = 'Y'
+		   AND NVL(w.SDEL_YN, 'N') = 'N'
+		   AND ( <include refid="kwMatch"><property name="col" value="w.STITLE"/></include>
+		      OR ( w.SSEARCH_TEXT IS NOT NULL
+		           AND UPPER(w.SSEARCH_TEXT) LIKE '%' || UPPER(#{keyword}) || '%' ) )
+		<include refid="relMasterCurrent"/>
+		<include refid="gubunCateFilter"><property name="ga" value="cur"/></include>
+		<include refid="effective"><property name="ga" value="cur"/></include>
+		<include refid="excludeDeletedCate"><property name="ga" value="cur"/></include>
+		<include refid="excludeHiddenGubun"><property name="ga" value="cur"/></include>
+		<include refid="readGate"><property name="ga" value="cur"/></include>
+	</sql>
+
+	<select id="searchRels" parameterType="map" resultType="java.util.LinkedHashMap">
+		
+			SELECT * FROM (
+				<include refid="relsUnion"/>
+			) X
+			 ORDER BY "promTitle", "kind", "title"
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="countRels" parameterType="map" resultType="int">
+		SELECT COUNT(*) FROM (
+			<include refid="relsUnion"/>
+		) X
+	</select>
+
+	<!-- ═══ ⑤ 게시판 글 — 제목(공백무시)·본문(CLOB) 검색 ═══
+	     대상 게시판 = 통합검색 노출(SEARCH_INCLD_AT='Y')·사용중(USE_AT='Y') 이면서 사용자가 열람 가능한 것.
+	     열람권한은 역할기반(BoardReadGuard, 메뉴 역할매핑)이라 SQL 로 재현하지 않고 서비스가 bbsIds 로 주입.
+	     삭제글(USE_AT='N')·비밀글(SECRET_AT='Y')은 제외. -->
+	<sql id="bbsWhere">
+		  FROM COMTNBBS a
+		  JOIN COMTNBBSMASTER m ON m.BBS_ID = a.BBS_ID
+		  LEFT OUTER JOIN COMVNUSERMASTER b ON b.ESNTL_ID = a.FRST_REGISTER_ID
+		 WHERE m.SEARCH_INCLD_AT = 'Y' AND m.USE_AT = 'Y'
+		   AND a.USE_AT = 'Y'
+		   AND NVL(a.SECRET_AT, 'N') != 'Y'
+		   AND a.BBS_ID IN
+		   <foreach collection="bbsIds" item="bid" open="(" separator="," close=")">#{bid}</foreach>
+		   AND ( <include refid="kwMatch"><property name="col" value="a.NTT_SJ"/></include>
+		      OR ( a.NTT_CN IS NOT NULL AND INSTR(a.NTT_CN, #{keyword}) > 0 ) )
+	</sql>
+
+	<select id="searchBbs" parameterType="map" resultType="java.util.LinkedHashMap">
+		
+			SELECT a.NTT_ID AS "nttId", a.BBS_ID AS "bbsId", m.BBS_NM AS "bbsNm",
+			       a.NTT_SJ AS "title",
+			       <![CDATA[ SUBSTR(REGEXP_REPLACE(REGEXP_REPLACE(SUBSTRING(a.NTT_CN, 1, 1000), '<[^>]*>|&[a-zA-Z#0-9]{2,8};', ' '), '[[:space:]]+', ' '), 1, 160) ]]> AS "snippet",
+			       TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD') AS "regDate",
+			       NVL(b.USER_NM, a.NTCR_NM) AS "regNm"
+			<include refid="bbsWhere"/>
+			 ORDER BY CASE WHEN UPPER(REPLACE(a.NTT_SJ, ' ', '')) = UPPER(REPLACE(#{keyword}, ' ', '')) THEN 0
+			               WHEN UPPER(REPLACE(a.NTT_SJ, ' ', '')) LIKE UPPER(REPLACE(#{keyword}, ' ', '')) || '%' THEN 1
+			               ELSE 2 END,
+			          a.FRST_REGIST_PNTTM DESC, a.NTT_ID DESC
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="countBbs" parameterType="map" resultType="int">
+		SELECT COUNT(*)
+		<include refid="bbsWhere"/>
+	</select>
+
+	<select id="selectSearchableBbsIds" resultType="string">
+		SELECT BBS_ID FROM COMTNBBSMASTER WHERE SEARCH_INCLD_AT = 'Y' AND USE_AT = 'Y'
+	</select>
+
+	<!-- ═══ ⑥ FAQ — 질문제목·질문내용·답변내용 검색(전부 공백무시 매칭) ═══
+	     COMTNFAQINFO 는 항목별 열람제한 없음(로그인 사용자 공용 — 통합검색 자체가 로그인 게이트).
+	     결과 딥링크 = 사용자 FAQ 목록(selectFaqUserList.do) 제목 필터 착지. -->
+	<sql id="faqWhere">
+		  FROM COMTNFAQINFO f
+		  LEFT OUTER JOIN COMTCCMMNDETAILCODE fc ON fc.CODE_ID = 'faqCode' AND fc.CODE = f.FAQ_CODE
+		 WHERE ( <include refid="kwMatch"><property name="col" value="f.QESTN_SJ"/></include>
+		      OR <include refid="kwMatch"><property name="col" value="f.QESTN_CN"/></include>
+		      OR <include refid="kwMatch"><property name="col" value="f.ANSWER_CN"/></include> )
+	</sql>
+
+	<select id="searchFaq" parameterType="map" resultType="java.util.LinkedHashMap">
+		
+			SELECT f.FAQ_ID AS "faqId", f.QESTN_SJ AS "title", fc.CODE_NM AS "cateNm",
+			       SUBSTR(REGEXP_REPLACE(f.ANSWER_CN, '[[:space:]]+', ' '), 1, 160) AS "snippet",
+			       TO_CHAR(f.FRST_REGIST_PNTTM, 'YYYY-MM-DD') AS "regDate"
+			<include refid="faqWhere"/>
+			 ORDER BY CASE WHEN UPPER(REPLACE(f.QESTN_SJ, ' ', '')) = UPPER(REPLACE(#{keyword}, ' ', '')) THEN 0
+			               WHEN UPPER(REPLACE(f.QESTN_SJ, ' ', '')) LIKE UPPER(REPLACE(#{keyword}, ' ', '')) || '%' THEN 1
+			               ELSE 2 END,
+			          f.FAQ_ID DESC
+		LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+	</select>
+
+	<select id="countFaq" parameterType="map" resultType="int">
+		SELECT COUNT(*)
+		<include refid="faqWhere"/>
+	</select>
+
+	<!-- ═══════ 검색어 통계 (TB_STATS_KWD — 레거시 계승: 검색 1회=1행, 인기=SUM(ICNT)) ═══════ -->
+
+	<insert id="insertKeywordStat" parameterType="map">
+		INSERT INTO TB_STATS_KWD (ISKWD_NO, SKWD, ICNT, SINS_DT)
+		VALUES (#{id}, #{kwd}, 1, TO_CHAR(SYSDATE(), 'YYYY-MM-DD'))
+	</insert>
+
+	<!-- 레거시에 미래일자 오염행(~2030) 존재 — SYSDATE() 상한으로 차단 -->
+	<select id="selectPopularKeywords" parameterType="map" resultType="string">
+		SELECT SKWD FROM (
+			SELECT k.SKWD, SUM(k.ICNT) AS CNT
+			  FROM TB_STATS_KWD k
+			 WHERE k.SINS_DT BETWEEN TO_CHAR(SYSDATE() - INTERVAL #{days} DAY, 'YYYY-MM-DD') AND TO_CHAR(SYSDATE(), 'YYYY-MM-DD')
+			   AND k.SKWD IS NOT NULL AND TRIM(k.SKWD) != ''
+			 GROUP BY k.SKWD
+			 ORDER BY CNT DESC, k.SKWD
+		) X LIMIT #{topN}
+	</select>
+
+</mapper>

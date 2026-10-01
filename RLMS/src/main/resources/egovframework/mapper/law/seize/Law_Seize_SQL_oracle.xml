@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/seize/Law_Seize_SQL_oracle.xml
+  압류관리(LAW_SEIZE) — 게시판형 CRUD + 검색축(담당부서/채권자/채무자/제3채무자/관할법원/사건번호) + 조회수. §7.10
+-->
+<mapper namespace="narainet.law.seize.mapper.LawSeizeMapper">
+
+	<sql id="seizeCols">
+		S.SEIZE_ID     AS seizeId,
+		S.CREDITOR     AS creditor,
+		S.DEBTOR       AS debtor,
+		S.THIRD_DEBTOR AS thirdDebtor,
+		S.ORGNZT_ID    AS orgnztId,
+		OG.ORGNZT_NM   AS orgnztNm,
+		S.COURT_NM     AS courtNm,
+		S.CASE_NO      AS caseNo,
+		S.MEMO         AS memo,
+		S.READ_CNT     AS readCnt,
+		S.ATCH_FILE_ID AS atchFileId,
+		S.REG_USER_ID  AS regUserId,
+		S.REG_DT       AS regDt,
+		S.UPD_USER_ID  AS updUserId,
+		S.UPD_DT       AS updDt
+	</sql>
+
+	<sql id="seizeFrom">
+		FROM LAW_SEIZE S
+		LEFT OUTER JOIN COMTNORGNZTINFO OG ON OG.ORGNZT_ID = S.ORGNZT_ID
+	</sql>
+
+	<sql id="searchWhere">
+		<if test='searchFrom != null and searchFrom != ""'>
+		  AND SUBSTR(S.REG_DT, 1, 8) <![CDATA[>=]]> #{searchFrom}
+		</if>
+		<if test='searchTo != null and searchTo != ""'>
+		  AND SUBSTR(S.REG_DT, 1, 8) <![CDATA[<=]]> #{searchTo}
+		</if>
+		<if test='searchKeyword != null and searchKeyword != ""'>
+			<choose>
+				<when test='searchAxis == "ORGNZT"'>       AND OG.ORGNZT_NM  LIKE '%' || #{searchKeyword} || '%' </when>
+				<when test='searchAxis == "CREDITOR"'>     AND S.CREDITOR    LIKE '%' || #{searchKeyword} || '%' </when>
+				<when test='searchAxis == "DEBTOR"'>       AND S.DEBTOR      LIKE '%' || #{searchKeyword} || '%' </when>
+				<when test='searchAxis == "THIRD_DEBTOR"'> AND S.THIRD_DEBTOR LIKE '%' || #{searchKeyword} || '%' </when>
+				<when test='searchAxis == "COURT"'>        AND S.COURT_NM    LIKE '%' || #{searchKeyword} || '%' </when>
+				<when test='searchAxis == "CASE_NO"'>      AND S.CASE_NO     LIKE '%' || #{searchKeyword} || '%' </when>
+				<otherwise>
+				  AND ( S.CREDITOR LIKE '%' || #{searchKeyword} || '%'
+				     OR S.DEBTOR LIKE '%' || #{searchKeyword} || '%'
+				     OR S.THIRD_DEBTOR LIKE '%' || #{searchKeyword} || '%'
+				     OR S.COURT_NM LIKE '%' || #{searchKeyword} || '%'
+				     OR S.CASE_NO LIKE '%' || #{searchKeyword} || '%'
+				     OR OG.ORGNZT_NM LIKE '%' || #{searchKeyword} || '%' )
+				</otherwise>
+			</choose>
+		</if>
+	</sql>
+
+	<select id="selectSeizeCnt" parameterType="narainet.law.seize.service.LawSeizeVO" resultType="int">
+		SELECT COUNT(*)
+		<include refid="seizeFrom"/>
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectSeizeList" parameterType="narainet.law.seize.service.LawSeizeVO"
+	        resultType="narainet.law.seize.service.LawSeizeVO">
+		SELECT *
+		  FROM (
+		        SELECT ROWNUM RN, A.*
+		          FROM (
+		                SELECT <include refid="seizeCols"/>
+		                <include refid="seizeFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="searchWhere"/>
+		                 ORDER BY S.SEIZE_ID DESC
+		               ) A
+		         WHERE ROWNUM <![CDATA[<=]]> #{lastIndex}
+		       )
+		 WHERE RN <![CDATA[>]]> #{firstIndex}
+	</select>
+
+	<select id="selectSeize" resultType="narainet.law.seize.service.LawSeizeVO">
+		SELECT <include refid="seizeCols"/>
+		<include refid="seizeFrom"/>
+		 WHERE S.SEIZE_ID = #{seizeId}
+	</select>
+
+	<insert id="insertSeize" parameterType="narainet.law.seize.service.LawSeizeVO">
+		INSERT INTO LAW_SEIZE (
+			SEIZE_ID, CREDITOR, DEBTOR, THIRD_DEBTOR, ORGNZT_ID, COURT_NM, CASE_NO, MEMO,
+			READ_CNT, ATCH_FILE_ID, REG_USER_ID, REG_DT
+		) VALUES (
+			#{seizeId}, #{creditor, jdbcType=VARCHAR}, #{debtor, jdbcType=VARCHAR}, #{thirdDebtor, jdbcType=VARCHAR},
+			#{orgnztId, jdbcType=CHAR}, #{courtNm, jdbcType=VARCHAR}, #{caseNo, jdbcType=VARCHAR}, #{memo, jdbcType=CLOB},
+			0, #{atchFileId, jdbcType=CHAR}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateSeize" parameterType="narainet.law.seize.service.LawSeizeVO">
+		UPDATE LAW_SEIZE
+		   SET CREDITOR     = #{creditor, jdbcType=VARCHAR},
+		       DEBTOR       = #{debtor, jdbcType=VARCHAR},
+		       THIRD_DEBTOR = #{thirdDebtor, jdbcType=VARCHAR},
+		       ORGNZT_ID    = #{orgnztId, jdbcType=CHAR},
+		       COURT_NM     = #{courtNm, jdbcType=VARCHAR},
+		       CASE_NO      = #{caseNo, jdbcType=VARCHAR},
+		       MEMO         = #{memo, jdbcType=CLOB},
+		       ATCH_FILE_ID = #{atchFileId, jdbcType=CHAR},
+		       UPD_USER_ID  = #{updUserId},
+		       UPD_DT       = #{updDt}
+		 WHERE SEIZE_ID = #{seizeId}
+	</update>
+
+	<delete id="deleteSeize">
+		DELETE FROM LAW_SEIZE WHERE SEIZE_ID = #{seizeId}
+	</delete>
+
+	<update id="updateReadCnt">
+		UPDATE LAW_SEIZE SET READ_CNT = NVL(READ_CNT, 0) + 1 WHERE SEIZE_ID = #{seizeId}
+	</update>
+
+</mapper>

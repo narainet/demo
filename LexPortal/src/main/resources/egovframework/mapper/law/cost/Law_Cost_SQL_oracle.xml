@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/law/cost/Law_Cost_SQL_oracle.xml
+  소송비용(LAW_SUIT_COST) — 조회 목록(사건 조인·합계)·사건별 목록·CRUD. §7.3
+-->
+<mapper namespace="narainet.law.cost.mapper.LawCostMapper">
+
+	<sql id="costCols">
+		C.COST_ID      AS costId,
+		C.SUIT_ID      AS suitId,
+		C.COST_KIND_CD AS costKindCd,
+		CK.CODE_NM     AS costKindNm,
+		C.COST_AMT     AS costAmt,
+		C.COST_DESC    AS costDesc,
+		C.PAY_DMND_DT  AS payDmndDt,
+		C.REG_DT       AS regDt,
+		S.COURT_NM     AS courtNm,
+		S.CASE_NO      AS caseNo,
+		S.CASE_NM      AS caseNm
+	</sql>
+
+	<sql id="costFrom">
+		FROM LAW_SUIT_COST C
+		JOIN LAW_SUIT S ON S.SUIT_ID = C.SUIT_ID AND S.DEL_YN = 'N'
+		LEFT OUTER JOIN COMTCCMMNDETAILCODE CK ON CK.CODE_ID = 'LAW_COST_KIND' AND CK.CODE = C.COST_KIND_CD
+	</sql>
+
+	<sql id="searchWhere">
+		<if test='searchFrFrom != null and searchFrFrom != ""'>
+		  AND S.FR_DT <![CDATA[>=]]> #{searchFrFrom}
+		</if>
+		<if test='searchFrTo != null and searchFrTo != ""'>
+		  AND S.FR_DT <![CDATA[<=]]> #{searchFrTo}
+		</if>
+		<if test='searchItpt != null and searchItpt != ""'>
+		  AND S.ITPT_KIND_CD = #{searchItpt}
+		</if>
+		<if test='searchCaseKind != null and searchCaseKind != ""'>
+		  AND S.CASE_KIND_CD = #{searchCaseKind}
+		</if>
+		<if test='searchRslt != null and searchRslt != ""'>
+		  AND S.RSLT_KIND_CD = #{searchRslt}
+		</if>
+		<if test='searchCaseYear != null and searchCaseYear != ""'>
+		  AND S.CASE_YEAR = #{searchCaseYear}
+		</if>
+		<if test='searchCaseSign != null and searchCaseSign != ""'>
+		  AND S.CASE_SIGN_CD = #{searchCaseSign}
+		</if>
+		<if test='searchCaseSerial != null and searchCaseSerial != ""'>
+		  AND S.CASE_SERIAL LIKE '%' || #{searchCaseSerial} || '%'
+		</if>
+		<if test='searchCaseNm != null and searchCaseNm != ""'>
+		  AND S.CASE_NM LIKE '%' || #{searchCaseNm} || '%'
+		</if>
+		<if test='searchCostKind != null and searchCostKind != ""'>
+		  AND C.COST_KIND_CD = #{searchCostKind}
+		</if>
+	</sql>
+
+	<select id="selectCostCnt" parameterType="narainet.law.cost.service.LawSuitCostVO" resultType="int">
+		SELECT COUNT(*)
+		<include refid="costFrom"/>
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectCostSum" parameterType="narainet.law.cost.service.LawSuitCostVO" resultType="long">
+		SELECT NVL(SUM(C.COST_AMT), 0)
+		<include refid="costFrom"/>
+		 WHERE 1 = 1
+		<include refid="searchWhere"/>
+	</select>
+
+	<select id="selectCostList" parameterType="narainet.law.cost.service.LawSuitCostVO"
+	        resultType="narainet.law.cost.service.LawSuitCostVO">
+		SELECT *
+		  FROM (
+		        SELECT ROWNUM RN, A.*
+		          FROM (
+		                SELECT <include refid="costCols"/>
+		                <include refid="costFrom"/>
+		                 WHERE 1 = 1
+		                <include refid="searchWhere"/>
+		                 ORDER BY C.COST_ID DESC
+		               ) A
+		         WHERE ROWNUM <![CDATA[<=]]> #{lastIndex}
+		       )
+		 WHERE RN <![CDATA[>]]> #{firstIndex}
+	</select>
+
+	<select id="selectCostListBySuit" resultType="narainet.law.cost.service.LawSuitCostVO">
+		SELECT <include refid="costCols"/>
+		<include refid="costFrom"/>
+		 WHERE C.SUIT_ID = #{suitId}
+		 ORDER BY C.COST_ID DESC
+	</select>
+
+	<select id="selectCost" resultType="narainet.law.cost.service.LawSuitCostVO">
+		SELECT <include refid="costCols"/>
+		<include refid="costFrom"/>
+		 WHERE C.COST_ID = #{costId}
+	</select>
+
+	<insert id="insertCost" parameterType="narainet.law.cost.service.LawSuitCostVO">
+		INSERT INTO LAW_SUIT_COST (
+			COST_ID, SUIT_ID, COST_KIND_CD, COST_AMT, COST_DESC, PAY_DMND_DT, REG_USER_ID, REG_DT
+		) VALUES (
+			#{costId}, #{suitId}, #{costKindCd, jdbcType=VARCHAR}, #{costAmt, jdbcType=NUMERIC},
+			#{costDesc, jdbcType=VARCHAR}, #{payDmndDt, jdbcType=VARCHAR}, #{regUserId}, #{regDt}
+		)
+	</insert>
+
+	<update id="updateCost" parameterType="narainet.law.cost.service.LawSuitCostVO">
+		UPDATE LAW_SUIT_COST
+		   SET COST_KIND_CD = #{costKindCd, jdbcType=VARCHAR},
+		       COST_AMT     = #{costAmt, jdbcType=NUMERIC},
+		       COST_DESC    = #{costDesc, jdbcType=VARCHAR},
+		       PAY_DMND_DT  = #{payDmndDt, jdbcType=VARCHAR},
+		       UPD_USER_ID  = #{updUserId},
+		       UPD_DT       = #{updDt}
+		 WHERE COST_ID = #{costId}
+	</update>
+
+	<delete id="deleteCost">
+		DELETE FROM LAW_SUIT_COST WHERE COST_ID = #{costId}
+	</delete>
+
+</mapper>

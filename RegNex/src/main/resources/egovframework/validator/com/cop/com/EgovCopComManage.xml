@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE form-validation PUBLIC 
+    "-//Apache Software Foundation//DTD Commons Validator Rules Configuration 1.1//EN" 
+    "http://jakarta.apache.org/commons/dtds/validator_1_1.dtd">
+
+<form-validation>
+    <formset>
+		<form name="templateInf" >
+			<field property="tmplatNm" depends="required, maxlength">
+        		<arg0 key="cop.tmplatNm" />
+        		<arg1 key="120" resource="true"/>
+				<var>
+					<var-name>maxlength</var-name>
+					<var-value>120</var-value>
+				</var>
+			</field>
+			<!-- tmplatCours(템플릿 CSS경로)는 템플릿 재설계(2026-07)로 폐기 - 필수검증 제거. 표현형태는 엔진코드(tmplatSeCode)가 결정. -->
+			<field property="tmplatSeCode" depends="required">
+        		<arg0 key="cop.tmplatSeCode" />
+			</field>				
+		</form>
+    </formset>
+
+</form-validation>

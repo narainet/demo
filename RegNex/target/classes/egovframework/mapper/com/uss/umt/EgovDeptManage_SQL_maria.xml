@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="deptManageDAO">
+
+    <resultMap id="deptManageVO" type="egovframework.com.uss.umt.service.DeptManageVO">
+        <result property="orgnztId" column="ORGNZT_ID"/>
+        <result property="orgnztNm" column="ORGNZT_NM"/>
+        <result property="orgnztDc" column="ORGNZT_DC"/>
+        <result property="upperOrgnztId" column="UPPER_ORGNZT_ID"/>
+        <result property="ordr" column="ORDR"/>
+        <result property="childCnt" column="CHILD_CNT"/>
+    </resultMap>
+
+    <!-- ══ 트리 전환 (2026-07-27) — 계층(UPPER_ORGNZT_ID)·순서(ORDR) 지원 구문 ══ -->
+
+    <!-- 전 부서 평면 조회 (트리 조립용) — 형제 정렬은 ORDR 오름차순(NULL 마지막)·이름 보조 -->
+    <select id="selectDeptTreeList" resultMap="deptManageVO">
+            SELECT o.ORGNZT_ID,
+                   o.ORGNZT_NM,
+                   o.ORGNZT_DC,
+                   o.UPPER_ORGNZT_ID,
+                   o.ORDR,
+                   (SELECT COUNT(*) FROM COMTNORGNZTINFO c WHERE c.UPPER_ORGNZT_ID = o.ORGNZT_ID) CHILD_CNT
+              FROM COMTNORGNZTINFO o
+             ORDER BY NVL(o.ORDR, 99999), o.ORGNZT_NM, o.ORGNZT_ID
+    </select>
+
+    <!-- 하위부서 수 (삭제 가드) -->
+    <select id="selectDeptChildCnt" resultType="int">
+            SELECT COUNT(*)
+              FROM COMTNORGNZTINFO
+             WHERE UPPER_ORGNZT_ID = #{orgnztId}
+    </select>
+
+    <!-- 같은 부모 아래 최대 순서 (신규/이동 시 마지막 배치) -->
+    <select id="selectDeptMaxOrdr" resultType="int">
+            SELECT NVL(MAX(ORDR), 0)
+              FROM COMTNORGNZTINFO
+             WHERE
+            <choose>
+                <when test='upperOrgnztId != null and upperOrgnztId != ""'>UPPER_ORGNZT_ID = #{upperOrgnztId}</when>
+                <otherwise>UPPER_ORGNZT_ID IS NULL</otherwise>
+            </choose>
+    </select>
+
+    <!-- 형제 목록 (순서 재배치용) — selectDeptTreeList 와 동일 정렬 -->
+    <select id="selectDeptSiblings" resultMap="deptManageVO">
+            SELECT ORGNZT_ID, ORGNZT_NM, ORGNZT_DC, UPPER_ORGNZT_ID, ORDR
+              FROM COMTNORGNZTINFO
+             WHERE
+            <choose>
+                <when test='upperOrgnztId != null and upperOrgnztId != ""'>UPPER_ORGNZT_ID = #{upperOrgnztId}</when>
+                <otherwise>UPPER_ORGNZT_ID IS NULL</otherwise>
+            </choose>
+             ORDER BY NVL(ORDR, 99999), ORGNZT_NM, ORGNZT_ID
+    </select>
+
+    <!-- 부서명·설명·상위·순서 일괄 수정 (트리 화면 전용) -->
+    <update id="updateDeptTree">
+            UPDATE COMTNORGNZTINFO
+               SET ORGNZT_NM = #{orgnztNm},
+                   ORGNZT_DC = #{orgnztDc, jdbcType=VARCHAR},
+                   UPPER_ORGNZT_ID = #{upperOrgnztId, jdbcType=CHAR},
+                   ORDR = #{ordr, jdbcType=NUMERIC}
+             WHERE ORGNZT_ID = #{orgnztId}
+    </update>
+
+    <!-- 순서만 수정 (재배치 루프) -->
+    <update id="updateDeptOrdr">
+            UPDATE COMTNORGNZTINFO
+               SET ORDR = #{ordr, jdbcType=NUMERIC}
+             WHERE ORGNZT_ID = #{orgnztId}
+    </update>
+
+    <select id="selectDeptManageList" resultMap="deptManageVO">
+            
+            
+
+            SELECT ORGNZT_ID,
+                   ORGNZT_NM,
+                   ORGNZT_DC
+              FROM COMTNORGNZTINFO 
+             WHERE 1=1
+                             
+            <if test="searchKeyword != null and searchKeyword != ''">AND
+                ORGNZT_NM LIKE '%'||#{searchKeyword}||'%'
+            </if>
+            <![CDATA[     
+            ORDER BY ORGNZT_ID DESC
+		 LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+               ]]>
+                          
+    </select>
+
+    <select id="selectDeptManageListTotCnt" resultType="int">
+
+            SELECT COUNT(*) totcnt
+            FROM COMTNORGNZTINFO
+            WHERE 1=1
+            <if test="searchKeyword != null and searchKeyword != ''">AND
+                ORGNZT_NM LIKE '%'||#{searchKeyword}||'%'
+            </if>
+    </select>
+    
+    <select id="selectDeptManage" resultMap="deptManageVO">
+
+            SELECT ORGNZT_ID,
+                   ORGNZT_NM,
+                   ORGNZT_DC,
+                   UPPER_ORGNZT_ID,
+                   ORDR
+              FROM COMTNORGNZTINFO
+             WHERE ORGNZT_ID = #{orgnztId}
+
+    </select>
+
+    <insert id="insertDeptManage">
+
+            INSERT INTO COMTNORGNZTINFO
+                   (ORGNZT_ID,
+                    ORGNZT_NM,
+                    ORGNZT_DC,
+                    UPPER_ORGNZT_ID,
+                    ORDR)
+            VALUES (#{orgnztId},
+                    #{orgnztNm},
+                    #{orgnztDc, jdbcType=VARCHAR},
+                    #{upperOrgnztId, jdbcType=CHAR},
+                    #{ordr, jdbcType=NUMERIC})
+
+    </insert>
+
+    <update id="updateDeptManage">
+            UPDATE COMTNORGNZTINFO
+               SET ORGNZT_NM = #{orgnztNm},
+                   ORGNZT_DC = #{orgnztDc}  
+             WHERE ORGNZT_ID = #{orgnztId}      
+    </update>    
+    
+    <delete id="deleteDeptManage">
+        
+            DELETE FROM COMTNORGNZTINFO
+             WHERE ORGNZT_ID = #{orgnztId}    
+        
+    </delete>  
+
+</mapper>

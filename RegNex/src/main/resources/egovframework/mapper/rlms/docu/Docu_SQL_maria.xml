@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/rlms/docu/Docu_SQL_maria.xml
+
+  별표/별지서식(TB_DOCU) MyBatis 매핑.
+
+  ★ 누적(상속) 조회 — 레거시 DocumentService.getSelectSql 이식.
+    한 회차의 전체 별표 = 같은 ILAW_ID 회차들(ILAW_NO ≤ 이 회차) 중 SITEM 별 최신 회차의 행.
+    (TB_PROV_VRSN 과 같은 패턴이지만 join 키가 SFULL_ITEM 이 아닌 SITEM 이고 IDOCU_NO 기준으로 최종 행 식별)
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="narainet.rlms.docu.mapper.DocuMapper">
+
+	<resultMap id="docuResult" type="narainet.rlms.docu.service.DocuVO">
+		<result property="docuNo"      column="IDOCU_NO"/>
+		<result property="promNo"      column="IPROM_NO"/>
+		<result property="item"        column="SITEM"/>
+		<result property="grpTitle"    column="SGRP_TITLE"/>
+		<result property="title"       column="STITLE"/>
+		<result property="contents"    column="SCONTENTS"   jdbcType="CLOB"/>
+		<result property="reason"      column="SREASON"     jdbcType="CLOB"/>
+		<result property="searchText"  column="SSEARCH_TEXT" jdbcType="CLOB"/>
+		<result property="gaejungType" column="SGAEJUNG_TYPE"/>
+		<result property="dispYn"      column="SDISP_YN"/>
+		<result property="startDate"   column="SSTART_DT"/>
+		<result property="insDt"       column="SINS_DT"/>
+		<result property="sysId"       column="SSYS_ID"/>
+	</resultMap>
+
+	<sql id="docuCols">
+		D.IDOCU_NO, D.IPROM_NO, D.SITEM, D.SGRP_TITLE, D.STITLE,
+		D.SCONTENTS, D.SREASON, D.SSEARCH_TEXT,
+		D.SGAEJUNG_TYPE, D.SDISP_YN, D.SSTART_DT, D.SINS_DT, D.SSYS_ID
+	</sql>
+
+	<!--
+	  누적 조회 (레거시 DocumentService.getSelectSql) :
+	    1) MAX(ILAW_NO) per SITEM  for this lawId & ILAW_NO ≤ :lawNo
+	    2) 그 ILAW_NO 의 IPROM_NO 와 SITEM 매칭으로 D2.IDOCU_NO 추출
+	    3) 그 IDOCU_NO 의 D / PR 행을 반환. 관리자 모드는 SDISP_YN='N' 도 자기 회차면 포함.
+	  ORDER BY SDISP_YN DESC, SITEM ASC (레거시 와 동일 — 표시 항목 먼저, item 코드 순).
+	-->
+	<select id="selectDocuListCumulative" resultMap="docuResult">
+		SELECT <include refid="docuCols"/>
+		  FROM TB_DOCU D, TB_PROM PR,
+		     ( SELECT D2.IDOCU_NO
+		         FROM TB_DOCU D2,
+		            ( SELECT PR2.IPROM_NO, PD.SITEM
+		                FROM TB_PROM PR2,
+		                   ( SELECT MAX(P2.ILAW_NO) AS LAW_NO, D3.SITEM AS SITEM
+		                       FROM TB_PROM P2, TB_DOCU D3
+		                      WHERE P2.IPROM_NO = D3.IPROM_NO
+		                        AND P2.ILAW_ID  = #{lawId}
+		                        AND P2.ILAW_NO <![CDATA[ <= ]]> #{lawNo}
+		                      GROUP BY D3.SITEM ) PD
+		               WHERE PR2.ILAW_ID = #{lawId}
+		                 AND PR2.ILAW_NO = PD.LAW_NO ) PRD
+		        WHERE D2.IPROM_NO = PRD.IPROM_NO
+		          AND D2.SITEM    = PRD.SITEM ) D_MAX
+		 WHERE D.IDOCU_NO = D_MAX.IDOCU_NO
+		   AND D.IPROM_NO = PR.IPROM_NO
+		   AND PR.ILAW_ID = #{lawId}
+		   AND ( D.SDISP_YN = 'Y'
+		      OR ( NVL(D.SDISP_YN,'Y') = 'N' AND PR.ILAW_NO = #{lawNo} ) )
+		 ORDER BY D.SDISP_YN DESC, D.SITEM ASC
+	</select>
+
+	<select id="selectDocuByNo" resultMap="docuResult">
+		SELECT <include refid="docuCols"/>
+		  FROM TB_DOCU D
+		 WHERE D.IDOCU_NO = #{docuNo}
+	</select>
+
+	<!-- (promNo, SITEM) 복합키 조회 — 레거시 documentDao.get(promNo, fullItem). 개정분기 upsert 가드용 -->
+	<select id="selectDocuByPromItem" resultMap="docuResult">
+		SELECT <include refid="docuCols"/>
+		  FROM TB_DOCU D
+		 WHERE D.IPROM_NO = #{promNo}
+		   AND D.SITEM    = #{item}
+		 ORDER BY D.IDOCU_NO
+	</select>
+
+<!--
+	  신규 별표/별지서식 등록.
+	   - 실DB 저장형태(2026-06-09 전수조사): SITEM 8자리(TYPE2+ITEM4+SUBITEM2), SGRP_TITLE=' '(공백 1자),
+	     SINS_DT/SSTART_DT='YYYY-MM-DD HH24:MI:SS'(운영상 동일값), SGAEJUNG_TYPE 도메인={NEW,MODIFY,NULLIFY,NULLIFY_SEMANTIC}.
+	   - SSYS_ID 는 단일 시스템 전환으로 미기록.
+	-->
+	<insert id="insertDocu" parameterType="narainet.rlms.docu.service.DocuVO">
+		INSERT INTO TB_DOCU (
+			IDOCU_NO, IPROM_NO, SITEM, SGRP_TITLE, STITLE,
+			SCONTENTS, SREASON, SSEARCH_TEXT,
+			SGAEJUNG_TYPE, SDISP_YN, SINS_DT, SSTART_DT
+		) VALUES (
+			#{docuNo}, #{promNo}, #{item}, NVL(#{grpTitle}, ' '), #{title},
+			#{contents,jdbcType=CLOB}, #{reason,jdbcType=CLOB}, #{searchText,jdbcType=CLOB},
+			NVL(#{gaejungType}, 'NEW'), NVL(#{dispYn}, 'Y'),
+			TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS'),
+			NVL(#{startDate}, TO_CHAR(SYSDATE(), 'YYYY-MM-DD HH24:MI:SS'))
+		)
+	</insert>
+
+	<update id="updateDocuContent" parameterType="narainet.rlms.docu.service.DocuVO">
+		UPDATE TB_DOCU
+		   SET STITLE        = #{title},
+		       SCONTENTS     = #{contents,jdbcType=CLOB},
+		       SREASON       = #{reason,jdbcType=CLOB},
+		       SGAEJUNG_TYPE = #{gaejungType},
+		       SDISP_YN      = NVL(#{dispYn}, 'Y')
+		 WHERE IDOCU_NO = #{docuNo}
+	</update>
+
+	<!--
+	  단건 별표/별지서식 물리 삭제 (레거시 DocumentDAO.delete 파리티).
+	   - 자기회차(own) 행에만 적용. 상속(이전회차) 행 삭제는 컨트롤러 own-회차 가드가 차단.
+	   - 별표 개별 첨부는 트리거 TRG_DEL_DOCU(BEFORE DELETE ON TB_DOCU)가 관련자료
+	     (SFLAG='DOCUMENT', SFULL_ITEM=SITEM) 를 지우며 TB_REL_FILE, TB_ATTACH 까지 연쇄 정리 (2026-07-30).
+	   - SDEL_YN/SDISP_YN tombstone 아님 — 이전 회차 기준 폐지는 branchDocu(SGAEJUNG_TYPE='NULLIFY' 행)가 담당.
+	-->
+	<delete id="deleteDocu">
+		DELETE FROM TB_DOCU WHERE IDOCU_NO = #{docuNo}
+	</delete>
+
+</mapper>

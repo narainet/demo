@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+	  
+	<bean name="propertiesService" class="org.egovframe.rte.fdl.property.impl.EgovPropertyServiceImpl" destroy-method="destroy">
+		<property name="properties">
+			<map>
+	            <entry key="pageUnit" value="10"/>
+	            <entry key="pageSize" value="10"/>
+			</map>
+		</property>
+		<!-- globals.properties 를 propertiesService 로도 로드 — Globals.* 키를
+		     propertyService.getString() 으로 읽을 수 있게 한다.
+		     RLMS 첨부 저장소 키 (globals.properties 에서 관리):
+		       · 신규 업로드 루트 = Globals.fileStorePath/rlms_attach (표준 키 재사용, 기본).
+		         Globals.rlms.AttachPath 를 정의하면 그 경로로 override (선택).
+		       · Globals.rlms.LegacyAttachPath : 레거시 이관 첨부 루트(레거시 ATTACH_SAVE_PATH,
+		         예: \work\lims\public_file\attach_save 마운트 경로). 미설정이면 레거시 첨부 해석
+		         비활성(다운로드/인라인 404, VIEWER/HTML 인라인은 파일목록 안내로 폴백 + 1회 warn 로그). -->
+		<property name="extFileName">
+			<set>
+				<map>
+					<entry key="encoding" value="UTF-8"/>
+					<entry key="filename" value="classpath*:egovframework/egovProps/globals.properties"/>
+				</map>
+			</set>
+		</property>
+	</bean>
+	
+</beans>	

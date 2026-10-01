@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="menuManageDAO">
+	
+	<select id="selectMainMenuLeft" parameterType="egovframework.com.sym.mnu.mpm.service.MenuManageVO" resultType="egovMap">
+		 
+			SELECT *
+			FROM (
+				SELECT
+				       B.MENU_NO           AS MENU_NO
+					 , B.MENU_ORDR         AS MENU_ORDR
+					 , B.MENU_NM           AS MENU_NM
+					 , B.UPPER_MENU_NO     AS UPPER_MENU_ID
+					 , B.RELATE_IMAGE_PATH AS RELATE_IMAGE_PATH
+					 , B.RELATE_IMAGE_NM   AS RELATE_IMAGE_NM
+					 , B.PROGRM_FILE_NM    AS PROGRM_FILE_NM
+					 , B.MENU_SE           AS MENU_SE
+					 , (SELECT C.URL FROM COMTNPROGRMLIST C WHERE B.PROGRM_FILE_NM = C.PROGRM_FILE_NM) AS CHK_URL
+				FROM   COMTNMENUCREATDTLS A, COMTNMENUINFO B
+				WHERE  A.MENU_NO  = B.MENU_NO
+				AND    ( #{menuSe,jdbcType=VARCHAR} IS NULL OR B.MENU_SE = #{menuSe,jdbcType=VARCHAR} )
+				AND    A.AUTHOR_CODE = (SELECT AUTHOR_CODE from COMTNEMPLYRSCRTYESTBS
+		                                WHERE  SCRTY_DTRMN_TRGET_ID = #{tmpUniqId})
+				UNION ALL
+				SELECT
+				       990000000 + ROW_NUMBER() OVER (ORDER BY BM.BBS_NM, BM.BBS_ID) AS MENU_NO
+					 , PARENT.BASE_MENU_ORDR + ROW_NUMBER() OVER (ORDER BY BM.BBS_NM, BM.BBS_ID) AS MENU_ORDR
+					 , BM.BBS_NM AS MENU_NM
+					 , PARENT.MENU_NO AS UPPER_MENU_ID
+					 , NULL AS RELATE_IMAGE_PATH
+					 , NULL AS RELATE_IMAGE_NM
+					 , 'bbsAutoArticle' AS PROGRM_FILE_NM
+					 , #{menuSe,jdbcType=VARCHAR} AS MENU_SE
+					 , '/cop/bbs/selectArticleList.do?bbsId=' || BM.BBS_ID AS CHK_URL
+				FROM COMTNBBSMASTER BM,
+				     (
+				     	SELECT PARENT_BASE.MENU_NO,
+				     	       NVL((SELECT MAX(CHILD.MENU_ORDR)
+				     	              FROM COMTNMENUINFO CHILD
+				     	             WHERE CHILD.UPPER_MENU_NO = PARENT_BASE.MENU_NO), 0) AS BASE_MENU_ORDR
+				     	  FROM (
+					     	SELECT MIN(M.MENU_NO) AS MENU_NO
+					     	  FROM COMTNMENUCREATDTLS A2, COMTNMENUINFO M
+					     	 WHERE A2.MENU_NO = M.MENU_NO
+					     	   AND A2.AUTHOR_CODE = (SELECT AUTHOR_CODE
+					     	                         FROM COMTNEMPLYRSCRTYESTBS
+					     	                        WHERE SCRTY_DTRMN_TRGET_ID = #{tmpUniqId})
+					     	   AND ( #{menuSe,jdbcType=VARCHAR} IS NULL OR M.MENU_SE = #{menuSe,jdbcType=VARCHAR} )
+					     	   AND (M.MENU_NM = '게시판관리'
+					     	    OR M.PROGRM_FILE_NM IN (
+					     	    	SELECT PR.PROGRM_FILE_NM
+					     	    	  FROM COMTNPROGRMLIST PR
+					     	    	 WHERE LOWER(PR.URL) = LOWER('/cop/bbs/selectBBSMasterInfs.do')
+					     	    ))
+				     	  ) PARENT_BASE
+				     ) PARENT
+				WHERE BM.USE_AT = 'Y'
+				  AND NVL(BM.BLOG_AT, 'N') != 'Y'
+				  AND PARENT.MENU_NO IS NOT NULL
+				  AND ( #{menuSe,jdbcType=VARCHAR} IS NULL OR #{menuSe,jdbcType=VARCHAR} IN ('USER', 'ADMIN') )
+			) X<!-- MariaDB 파생테이블 별칭 필수 -->
+			ORDER BY MENU_ORDR
+		 
+	</select>
+
+</mapper>

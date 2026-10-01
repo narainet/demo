@@ -1,0 +1,451 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- 
+	수정일                 수정자                          수정내용
+  =========     =======    =================================================
+  2011.09.07   	서준식     	 	NTCE_BGNDE, NTCE_ENDDE 컬럼 빈공간에 의한 비교 오류 때문에 Rtrim() 추가 
+  2011.09.21    서준식              selectMaxNttId문에 COMMIT 될때까지 LOCK설정
+  2011.09.21    서준식              NTT_ID를 IDGENT서비스를 사용해서 생성하므로 selectMaxNttId문은 실제 사용하지 않음
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="BBSArticle">
+
+	<resultMap id="boardList" type="egovframework.com.cop.bbs.service.BoardVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="nttId" column="NTT_ID"/>
+		<result property="nttSj" column="NTT_SJ"/>
+		<result property="frstRegisterId" column="FRST_REGISTER_ID"/>
+		<result property="frstRegisterNm" column="FRST_REGISTER_NM"/>
+		<result property="frstRegisterPnttm" column="FRST_REGIST_PNTTM"/>
+		<result property="inqireCo" column="RDCNT"/>
+		<result property="parnts" column="PARNTSCTT_NO"/>
+		<result property="replyAt" column="ANSWER_AT"/>
+		<result property="replyLc" column="ANSWER_LC"/>
+		<result property="useAt" column="USE_AT"/>
+		<result property="atchFileId" column="ATCH_FILE_ID"/>
+		<result property="ntceBgnde" column="NTCE_BGNDE"/>
+		<result property="ntceEndde" column="NTCE_ENDDE"/>
+		<result property="sjBoldAt" column="SJ_BOLD_AT"/>
+		<result property="noticeAt" column="NOTICE_AT"/>
+		<result property="secretAt" column="SECRET_AT"/>
+		<result property="commentCo" column="COMMENT_CO"/>
+		<!-- 웹진/앨범(MAGAZINE) 카드 요약: 태그 스트립된 평문 발췌를 nttCn 에 싣는다 -->
+		<result property="nttCn" column="NTT_CN_EXCERPT"/>
+		<!-- 여분필드 값 — 탭 분류형/자료실형 목록이 분류·표시에 사용(2026-07). -->
+		<result property="nttExtraField1" column="NTT_EXTRA_FIELD_1"/>
+		<result property="nttExtraField2" column="NTT_EXTRA_FIELD_2"/>
+		<result property="nttExtraField3" column="NTT_EXTRA_FIELD_3"/>
+		<result property="nttExtraField4" column="NTT_EXTRA_FIELD_4"/>
+		<result property="nttExtraField5" column="NTT_EXTRA_FIELD_5"/>
+		<result property="nttExtraField6" column="NTT_EXTRA_FIELD_6"/>
+		<result property="nttExtraField7" column="NTT_EXTRA_FIELD_7"/>
+		<result property="nttExtraField8" column="NTT_EXTRA_FIELD_8"/>
+		<result property="nttExtraField9" column="NTT_EXTRA_FIELD_9"/>
+		<result property="nttExtraField10" column="NTT_EXTRA_FIELD_10"/>
+	</resultMap>
+
+	<resultMap id="boardDetail" type="egovframework.com.cop.bbs.service.BoardVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="nttId" column="NTT_ID"/>
+		<result property="nttSj" column="NTT_SJ"/>	
+		<result property="ntcrId" column="NTCR_ID"/>
+		<result property="ntcrNm" column="NTCR_NM"/>
+		<result property="nttNo" column="NTT_NO"/>
+		<result property="nttCn" column="NTT_CN" jdbcType="CLOB"/>
+		<result property="password" column="PASSWORD"/>
+		<result property="frstRegisterId" column="FRST_REGISTER_ID"/>
+		<result property="frstRegisterNm" column="FRST_REGISTER_NM"/>
+		<result property="frstRegisterPnttm" column="FRST_REGIST_PNTTM"/>
+		<result property="ntceBgnde" column="NTCE_BGNDE"/>
+		<result property="ntceEndde" column="NTCE_ENDDE"/>
+		<result property="inqireCo" column="RDCNT"/>
+		<result property="useAt" column="USE_AT"/>
+		<result property="atchFileId" column="ATCH_FILE_ID"/>
+		<result property="parnts" column="PARNTSCTT_NO"/>
+		<result property="replyAt" column="ANSWER_AT"/>		
+		<result property="replyLc" column="ANSWER_LC"/>
+		<result property="sortOrdr" column="SORT_ORDR"/>
+		<result property="bbsTyCode" column="BBS_TY_CODE"/>
+		<result property="replyPosblAt" column="REPLY_POSBL_AT"/>
+		<result property="fileAtchPosblAt" column="FILE_ATCH_POSBL_AT"/>
+		<result property="posblAtchFileNumber" column="ATCH_POSBL_FILE_NUMBER"/>
+		<result property="bbsNm" column="BBS_NM"/>
+		<result property="sjBoldAt" column="SJ_BOLD_AT"/>
+		<result property="noticeAt" column="NOTICE_AT"/>
+		<result property="secretAt" column="SECRET_AT"/>
+		<result property="nttExtraField1" column="NTT_EXTRA_FIELD_1"/>
+		<result property="nttExtraField2" column="NTT_EXTRA_FIELD_2"/>
+		<result property="nttExtraField3" column="NTT_EXTRA_FIELD_3"/>
+		<result property="nttExtraField4" column="NTT_EXTRA_FIELD_4"/>
+		<result property="nttExtraField5" column="NTT_EXTRA_FIELD_5"/>
+		<result property="nttExtraField6" column="NTT_EXTRA_FIELD_6"/>
+		<result property="nttExtraField7" column="NTT_EXTRA_FIELD_7"/>
+		<result property="nttExtraField8" column="NTT_EXTRA_FIELD_8"/>
+		<result property="nttExtraField9" column="NTT_EXTRA_FIELD_9"/>
+		<result property="nttExtraField10" column="NTT_EXTRA_FIELD_10"/>
+	</resultMap>
+
+	<resultMap id="sortList" type="egovframework.com.cop.bbs.service.BoardVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="nttId" column="NTT_ID"/>
+		<result property="sortOrdr" column="SORT_ORDR"/>
+		<result property="parnts" column="PARNTSCTT_NO"/>
+		<result property="nttNo" column="NTT_NO"/>		
+		<result property="replyLc" column="ANSWER_LC"/>
+	</resultMap>
+
+	<resultMap id="guestList" type="egovframework.com.cop.bbs.service.BoardVO">
+		<result property="bbsId" column="BBS_ID"/>
+		<result property="nttId" column="NTT_ID"/>
+		<result property="nttSj" column="NTT_SJ"/>
+		<result property="frstRegisterPnttm" column="FRST_REGIST_PNTTM"/>
+		<result property="nttCn" column="NTT_CN"/>
+		<result property="useAt" column="USE_AT"/>
+		<result property="frstRegisterNm" column="FRST_REGISTER_NM"/>
+		<result property="frstRegisterId" column="FRST_REGISTER_ID"/>
+	</resultMap>
+	
+ 	<select id="selectMaxNttId" resultType="java.lang.Long">
+ 		
+			SELECT NVL(NTT_ID,0)+1 AS NTT_ID FROM COMTNBBS WHERE NTT_ID=(SELECT MAX(NTT_ID) AS NTT_ID  FROM COMTNBBS) FOR UPDATE WAIT 3  
+ 		
+ 	</select>
+ 	
+	<insert id="insertArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO">
+		<selectKey keyProperty="nttNo" resultType="java.lang.Long" order="BEFORE">
+			SELECT NVL(MAX(SORT_ORDR),0)+1 AS NTT_NO  FROM COMTNBBS
+			WHERE BBS_ID = #{bbsId}
+		</selectKey>
+		
+			INSERT INTO COMTNBBS
+			(NTT_ID, BBS_ID, NTT_SJ, NTT_CN, SORT_ORDR, 
+			 NTCR_ID, NTCR_NM, PASSWORD, RDCNT, 
+			 NTCE_BGNDE, NTCE_ENDDE, ANSWER_AT,  			   
+			 PARNTSCTT_NO, NTT_NO, ANSWER_LC, ATCH_FILE_ID,
+			 FRST_REGISTER_ID, FRST_REGIST_PNTTM, USE_AT,
+			 SJ_BOLD_AT, NOTICE_AT, SECRET_AT, BLOG_ID,
+			 NTT_EXTRA_FIELD_1, NTT_EXTRA_FIELD_2, NTT_EXTRA_FIELD_3, NTT_EXTRA_FIELD_4, NTT_EXTRA_FIELD_5,
+			 NTT_EXTRA_FIELD_6, NTT_EXTRA_FIELD_7, NTT_EXTRA_FIELD_8, NTT_EXTRA_FIELD_9, NTT_EXTRA_FIELD_10
+			 )
+			VALUES
+			( #{nttId}, #{bbsId}, #{nttSj}, #{nttCn}, #{nttId}, 
+			  #{ntcrId}, #{ntcrNm}, #{password}, #{inqireCo}, 
+			  #{ntceBgnde}, #{ntceEndde}, #{replyAt}, 
+			  #{parnts}, 1, #{replyLc}, #{atchFileId},
+			  #{frstRegisterId}, SYSDATE, 'Y',
+			  #{sjBoldAt}, #{noticeAt}, #{secretAt}, #{blogId},
+			  #{nttExtraField1}, #{nttExtraField2}, #{nttExtraField3}, #{nttExtraField4}, #{nttExtraField5},
+			  #{nttExtraField6}, #{nttExtraField7}, #{nttExtraField8}, #{nttExtraField9}, #{nttExtraField10}
+			)
+		
+	</insert>
+	
+	<insert id="replyArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO">
+		<selectKey keyProperty="nttNo" resultType="java.lang.Long" order ="BEFORE">
+			SELECT NVL(MAX(NTT_NO),0)+1 AS NTT_NO  FROM COMTNBBS
+			WHERE BBS_ID = #{bbsId} AND SORT_ORDR = #{sortOrdr}
+		</selectKey>			
+		
+			INSERT INTO COMTNBBS
+			(NTT_ID, BBS_ID, NTT_SJ, NTT_CN, SORT_ORDR, 
+			 NTCR_ID, NTCR_NM, PASSWORD, RDCNT, 
+			 NTCE_BGNDE, NTCE_ENDDE, ANSWER_AT,  			   
+			 PARNTSCTT_NO, NTT_NO, ANSWER_LC, ATCH_FILE_ID,
+			 FRST_REGISTER_ID, FRST_REGIST_PNTTM, USE_AT,
+			 SJ_BOLD_AT, NOTICE_AT, SECRET_AT
+			 )
+			VALUES
+			( #{nttId}, #{bbsId}, #{nttSj}, #{nttCn}, #{sortOrdr}, 
+			  #{ntcrId}, #{ntcrNm}, #{password}, #{inqireCo}, 
+			  #{ntceBgnde}, #{ntceEndde}, #{replyAt}, 
+			  #{parnts}, 1, #{replyLc}, #{atchFileId},
+			  #{frstRegisterId}, SYSDATE, 'Y',
+			  #{sjBoldAt}, #{noticeAt}, #{secretAt}
+			 )			
+		
+	</insert>	
+	
+			
+	<select id="selectArticleList" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultMap="boardList">
+
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				a.NTT_ID, a.NTT_SJ, a.FRST_REGISTER_ID, NVL(b.USER_NM, a.NTCR_NM) as FRST_REGISTER_NM,
+				<!-- 등록일시는 분까지 표시(2026-07-31). 달력형·연혁형 엔진은 이 값의 앞 10자(YYYY-MM-DD)를
+				     배치 기준일로 쓰므로 날짜가 맨 앞에 오는 형식을 유지해야 한다. -->
+				TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD HH24:MI') as FRST_REGIST_PNTTM,
+				a.RDCNT, a.PARNTSCTT_NO, a.ANSWER_AT, a.ANSWER_LC, a.USE_AT, a.ATCH_FILE_ID,
+				a.BBS_ID, rtrim(a.NTCE_BGNDE) NTCE_BGNDE, rtrim(a.NTCE_ENDDE) NTCE_ENDDE, a.SJ_BOLD_AT, a.NOTICE_AT, a.SECRET_AT, c.COMMENT_CO,
+				a.NTT_EXTRA_FIELD_1, a.NTT_EXTRA_FIELD_2, a.NTT_EXTRA_FIELD_3, a.NTT_EXTRA_FIELD_4, a.NTT_EXTRA_FIELD_5, a.NTT_EXTRA_FIELD_6, a.NTT_EXTRA_FIELD_7, a.NTT_EXTRA_FIELD_8, a.NTT_EXTRA_FIELD_9, a.NTT_EXTRA_FIELD_10,
+				<!-- 웹진/앨범(MAGAZINE) 카드 요약. CLOB 앞 1000자만 잘라(4000바이트 한계) 태그·엔티티 제거 후 300자 -->
+				<![CDATA[ SUBSTR(REGEXP_REPLACE(REGEXP_REPLACE(DBMS_LOB.SUBSTR(a.NTT_CN, 1000, 1), '<[^>]*>|&[a-zA-Z#0-9]{2,8};', ' '), '[[:space:]]+', ' '), 1, 300) AS NTT_CN_EXCERPT ]]>
+			FROM
+				COMTNBBS a
+			LEFT OUTER JOIN 
+				COMVNUSERMASTER b
+			ON a.FRST_REGISTER_ID = b.ESNTL_ID
+			LEFT OUTER JOIN
+				(SELECT NTT_ID, BBS_ID, COUNT(1) AS COMMENT_CO 
+				   FROM COMTNCOMMENT 
+				 WHERE USE_AT = 'Y' 
+				 GROUP BY NTT_ID, BBS_ID) c
+			ON a.NTT_ID = c.NTT_ID
+			AND a.BBS_ID = c.BBS_ID 
+			WHERE
+				a.BBS_ID = #{bbsId}
+			<if test='includeDeleted != "Y"'>
+			AND a.USE_AT = 'Y'
+			</if>
+			<!-- 탭분류형·자료실형 분류 필터 : 여분필드1(NTT_EXTRA_FIELD_1) 코드값. 다중선택(쉼표결합) 대응. 비면 전체. -->
+			<if test='searchCategory != null and searchCategory != ""'>
+			AND INSTR(',' || a.NTT_EXTRA_FIELD_1 || ',', ',' || #{searchCategory} || ',') > 0
+			</if>
+			<!-- 자료실형 사용자 노출 게이팅 : 게시기간(시작 이후 ~ 종료 이전)만. 관리자·타엔진은 미설정(전건). -->
+			<if test='ntceGateAt == "Y"'>
+			AND NOT ( COALESCE(LENGTH(RTRIM(a.NTCE_BGNDE)),0) = 10 AND RTRIM(a.NTCE_BGNDE) != '1900-01-01' AND RTRIM(a.NTCE_BGNDE) > #{todayYmd} )
+			AND NOT ( COALESCE(LENGTH(RTRIM(a.NTCE_ENDDE)),0) = 10 AND RTRIM(a.NTCE_ENDDE) != '9999-12-31' AND #{todayYmd} > RTRIM(a.NTCE_ENDDE) )
+			</if>
+
+			<if test="searchCnd == 0">AND
+					a.NTT_SJ LIKE '%' || #{searchWrd} || '%' 		
+			</if>
+			<if test="searchCnd == 1">AND
+					a.NTT_CN LIKE '%' || #{searchWrd} || '%' 		
+			</if>	
+			<if test="searchCnd == 2">AND
+					b.USER_NM LIKE '%' || #{searchWrd} || '%' 		
+			</if>				
+					
+			ORDER BY a.SORT_ORDR DESC, NTT_NO ASC
+			) TB ) WHERE rn BETWEEN #{firstIndex} + 1 AND #{firstIndex} + #{recordCountPerPage}
+						
+	</select>	
+	
+	<select id="selectArticleListCnt" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultType="java.lang.Integer">
+		
+			SELECT
+				COUNT(a.NTT_ID)
+			FROM
+				COMTNBBS a
+			LEFT OUTER JOIN 
+				COMVNUSERMASTER b
+			ON a.FRST_REGISTER_ID = b.ESNTL_ID 
+			WHERE
+				a.BBS_ID = #{bbsId}
+			<if test='includeDeleted != "Y"'>
+			AND a.USE_AT = 'Y'
+			</if>
+			<!-- 탭분류형·자료실형 분류 필터 : 여분필드1(NTT_EXTRA_FIELD_1) 코드값. 다중선택(쉼표결합) 대응. 비면 전체. -->
+			<if test='searchCategory != null and searchCategory != ""'>
+			AND INSTR(',' || a.NTT_EXTRA_FIELD_1 || ',', ',' || #{searchCategory} || ',') > 0
+			</if>
+			<!-- 자료실형 사용자 노출 게이팅 : 게시기간(시작 이후 ~ 종료 이전)만. 관리자·타엔진은 미설정(전건). -->
+			<if test='ntceGateAt == "Y"'>
+			AND NOT ( COALESCE(LENGTH(RTRIM(a.NTCE_BGNDE)),0) = 10 AND RTRIM(a.NTCE_BGNDE) != '1900-01-01' AND RTRIM(a.NTCE_BGNDE) > #{todayYmd} )
+			AND NOT ( COALESCE(LENGTH(RTRIM(a.NTCE_ENDDE)),0) = 10 AND RTRIM(a.NTCE_ENDDE) != '9999-12-31' AND #{todayYmd} > RTRIM(a.NTCE_ENDDE) )
+			</if>
+
+			<if test="searchCnd == 0">AND
+					a.NTT_SJ LIKE '%' || #{searchWrd} || '%' 		
+			</if>
+			<if test="searchCnd == 1">AND
+					a.NTT_CN LIKE '%' || #{searchWrd} || '%' 		
+			</if>	
+			<if test="searchCnd == 2">AND
+					b.USER_NM LIKE '%' || #{searchWrd} || '%' 		
+			</if>		
+	</select>	
+ 
+	<select id="selectArticleDetail" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultMap="boardDetail">
+		
+			SELECT
+				a.NTT_SJ, a.NTCR_ID, a.NTCR_NM, a.NTT_NO, a.NTT_CN,
+				a.PASSWORD, a.FRST_REGISTER_ID, b.USER_NM as FRST_REGISTER_NM,
+				<!-- 등록일시는 분까지 표시(2026-07-31) -->
+				TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD HH24:MI') as FRST_REGIST_PNTTM,
+				a.NTCE_BGNDE, a.NTCE_ENDDE, a.RDCNT,
+				a.USE_AT, a.ATCH_FILE_ID, a.BBS_ID, a.NTT_ID,
+				a.SJ_BOLD_AT, a.NOTICE_AT, a.SECRET_AT,
+				a.PARNTSCTT_NO, a.ANSWER_AT, a.ANSWER_LC, a.SORT_ORDR,
+				a.NTT_EXTRA_FIELD_1, a.NTT_EXTRA_FIELD_2, a.NTT_EXTRA_FIELD_3, a.NTT_EXTRA_FIELD_4, a.NTT_EXTRA_FIELD_5,
+				a.NTT_EXTRA_FIELD_6, a.NTT_EXTRA_FIELD_7, a.NTT_EXTRA_FIELD_8, a.NTT_EXTRA_FIELD_9, a.NTT_EXTRA_FIELD_10,
+				c.BBS_TY_CODE,  c.REPLY_POSBL_AT, 
+				c.FILE_ATCH_POSBL_AT, c.ATCH_POSBL_FILE_NUMBER, c.BBS_NM
+			FROM
+				COMTNBBS a
+			LEFT OUTER JOIN 
+				COMVNUSERMASTER b
+			ON a.FRST_REGISTER_ID = b.ESNTL_ID 
+			LEFT OUTER JOIN 
+				COMTNBBSMASTER c
+			ON a.BBS_ID = c.BBS_ID			
+			WHERE
+				a.BBS_ID = #{bbsId}	
+			AND
+				a.NTT_ID = #{nttId}	
+			<if test='includeDeleted != "Y"'>
+			AND a.USE_AT = 'Y'
+			</if>
+						
+	</select> 
+ 
+ 	<update id="updateArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO">
+ 		
+			UPDATE COMTNBBS SET 
+				NTT_SJ = #{nttSj},
+				NTT_CN = #{nttCn}, 
+				NTCE_BGNDE = #{ntceBgnde},		
+				NTCE_ENDDE = #{ntceEndde},
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				ATCH_FILE_ID = #{atchFileId},
+				LAST_UPDT_PNTTM = SYSDATE,
+				SJ_BOLD_AT = #{sjBoldAt},
+				NOTICE_AT = #{noticeAt},
+				SECRET_AT = #{secretAt},
+				NTT_EXTRA_FIELD_1 = #{nttExtraField1},
+				NTT_EXTRA_FIELD_2 = #{nttExtraField2},
+				NTT_EXTRA_FIELD_3 = #{nttExtraField3},
+				NTT_EXTRA_FIELD_4 = #{nttExtraField4},
+				NTT_EXTRA_FIELD_5 = #{nttExtraField5},
+				NTT_EXTRA_FIELD_6 = #{nttExtraField6},
+				NTT_EXTRA_FIELD_7 = #{nttExtraField7},
+				NTT_EXTRA_FIELD_8 = #{nttExtraField8},
+				NTT_EXTRA_FIELD_9 = #{nttExtraField9},
+				NTT_EXTRA_FIELD_10 = #{nttExtraField10}
+			WHERE BBS_ID = #{bbsId}
+			AND NTT_ID = #{nttId}
+ 		
+ 	</update>
+
+ 	<update id="deleteArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO">
+
+			UPDATE COMTNBBS SET
+				USE_AT = 'N',
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				LAST_UPDT_PNTTM = SYSDATE
+			WHERE BBS_ID = #{bbsId}
+			AND NTT_ID = #{nttId}
+
+ 	</update>
+
+ 	<!-- 소프트삭제(USE_AT='N') 되돌리기 — 관리자 복구 전용 -->
+ 	<update id="restoreArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO">
+
+			UPDATE COMTNBBS SET
+				USE_AT = 'Y',
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				LAST_UPDT_PNTTM = SYSDATE
+			WHERE BBS_ID = #{bbsId}
+			AND NTT_ID = #{nttId}
+
+ 	</update>
+
+ 	<select id="selectMaxInqireCo" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultType="java.lang.Integer">
+ 		
+			SELECT NVL(MAX(RDCNT),0)+1 AS RDCNT FROM COMTNBBS
+			WHERE BBS_ID = #{bbsId}
+			AND NTT_ID = #{nttId}
+ 		
+ 	</select>
+ 	
+
+ 	<update id="updateInqireCo" parameterType="egovframework.com.cop.bbs.service.BoardVO">
+ 		
+			UPDATE COMTNBBS SET 
+				RDCNT = #{inqireCo},
+				LAST_UPDUSR_ID = #{lastUpdusrId},
+				LAST_UPDT_PNTTM = SYSDATE
+			WHERE BBS_ID = #{bbsId}
+			AND NTT_ID = #{nttId}
+ 		
+ 	</update>
+
+	<select id="selectNoticeArticleList" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultMap="boardList">
+		
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				a.NTT_ID, a.NTT_SJ, a.FRST_REGISTER_ID, NVL(b.USER_NM, a.NTCR_NM) as FRST_REGISTER_NM,
+				<!-- 등록일시는 분까지 표시(2026-07-31) -->
+				TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD HH24:MI') as FRST_REGIST_PNTTM,
+				a.RDCNT, a.PARNTSCTT_NO, a.ANSWER_AT, a.ANSWER_LC, a.USE_AT, a.ATCH_FILE_ID,
+				a.BBS_ID, rtrim(a.NTCE_BGNDE) NTCE_BGNDE, rtrim(a.NTCE_ENDDE) NTCE_ENDDE, a.SJ_BOLD_AT, a.NOTICE_AT, a.SECRET_AT, c.COMMENT_CO
+			FROM
+				COMTNBBS a
+			LEFT OUTER JOIN 
+				COMVNUSERMASTER b
+			ON a.FRST_REGISTER_ID = b.ESNTL_ID
+			LEFT OUTER JOIN
+				(SELECT NTT_ID, BBS_ID, COUNT(1) AS COMMENT_CO 
+				   FROM COMTNCOMMENT 
+				 WHERE USE_AT = 'Y' 
+				 GROUP BY NTT_ID, BBS_ID) c
+			ON a.NTT_ID = c.NTT_ID
+			AND a.BBS_ID = c.BBS_ID 
+			WHERE
+				a.BBS_ID = #{bbsId}
+			AND a.USE_AT = 'Y'
+			AND a.NOTICE_AT = 'Y'
+		
+					
+			ORDER BY a.SORT_ORDR DESC, NTT_NO ASC
+			) TB ) WHERE rn BETWEEN 1 AND 5
+						
+	</select>	
+
+	<select id="selectGuestArticleList" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultMap="guestList">
+		SELECT * FROM ( SELECT rownum rn, TB.* FROM (
+			SELECT
+				a.NTT_ID, a.NTT_SJ,  
+				<!-- 표시용 — 분까지만. 옛 'HH'(12시간제, AM/PM 없음) 표기도 함께 HH24 로 교정 (2026-07-31) -->
+				TO_CHAR(a.FRST_REGIST_PNTTM, 'YYYY-MM-DD HH24:MI')	as FRST_REGIST_PNTTM,
+				a.NTT_CN, a.USE_AT, a.BBS_ID, b.USER_NM as FRST_REGISTER_NM, a.FRST_REGISTER_ID
+			FROM
+				COMTNBBS a, COMVNUSERMASTER b
+			WHERE
+				a.BBS_ID = #{bbsId}
+			AND 
+				a.FRST_REGISTER_ID = b.ESNTL_ID
+			AND
+				a.USE_AT = 'Y'
+			ORDER BY a.SORT_ORDR DESC, a.NTT_NO ASC
+		) TB ) WHERE rn BETWEEN #{firstIndex} + 1 AND #{firstIndex} + #{recordCountPerPage}
+						
+	</select>	
+	
+	<select id="selectGuestArticleListCnt" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultType="java.lang.Integer">
+		
+			SELECT
+				COUNT(NTT_ID)
+			FROM
+				COMTNBBS 
+			WHERE
+				BBS_ID = #{bbsId}	
+			AND
+				USE_AT = 'Y'
+					
+	</select>
+
+	<!-- 이전/다음 글 (웹진형 상세 네비). NTT_ID 큰 값=최신. 비밀글·삭제글 제외. -->
+	<select id="selectPrevArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultMap="boardList">
+		SELECT NTT_ID, NTT_SJ, ATCH_FILE_ID FROM (
+			SELECT a.NTT_ID, a.NTT_SJ, a.ATCH_FILE_ID
+			FROM COMTNBBS a
+			WHERE a.BBS_ID = #{bbsId}
+			AND a.USE_AT = 'Y'
+			AND NVL(a.SECRET_AT, 'N') != 'Y'
+			AND a.NTT_ID <![CDATA[ < ]]> #{nttId}
+			ORDER BY a.NTT_ID DESC
+		) WHERE ROWNUM = 1
+	</select>
+	<select id="selectNextArticle" parameterType="egovframework.com.cop.bbs.service.BoardVO" resultMap="boardList">
+		SELECT NTT_ID, NTT_SJ, ATCH_FILE_ID FROM (
+			SELECT a.NTT_ID, a.NTT_SJ, a.ATCH_FILE_ID
+			FROM COMTNBBS a
+			WHERE a.BBS_ID = #{bbsId}
+			AND a.USE_AT = 'Y'
+			AND NVL(a.SECRET_AT, 'N') != 'Y'
+			AND a.NTT_ID <![CDATA[ > ]]> #{nttId}
+			ORDER BY a.NTT_ID ASC
+		) WHERE ROWNUM = 1
+	</select>
+
+</mapper>

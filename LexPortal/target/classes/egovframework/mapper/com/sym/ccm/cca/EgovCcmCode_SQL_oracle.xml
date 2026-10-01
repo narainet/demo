@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  물리적 저장 경로: /src/main/resources/egovframework/mapper/com/sym/ccm/cca/EgovCcmCode_SQL_oracle.xml
+
+  공통코드 그룹(COMTCCMMNCODE)/상세(COMTCCMMNDETAILCODE) 통합 관리.
+  eGov 표준 ccm 3분할(ccc/cca/cde) 폐기 대체(2026-07-08). CL_CODE 는 분류코드 테이블
+  삭제로 미사용 — 신규 행은 NULL(기존 'EFC' 데이터는 잔존, 무해).
+-->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="egovframework.com.sym.ccm.cca.mapper.EgovCcmCodeMapper">
+
+	<resultMap id="codeResult" type="egovframework.com.sym.ccm.cca.service.CmmnCodeVO">
+		<result property="codeId"    column="CODE_ID"/>
+		<result property="codeIdNm"  column="CODE_ID_NM"/>
+		<result property="codeIdDc"  column="CODE_ID_DC"/>
+		<result property="useAt"     column="USE_AT"/>
+		<result property="detailCnt" column="DETAIL_CNT"/>
+	</resultMap>
+
+	<resultMap id="detailResult" type="egovframework.com.sym.ccm.cca.service.CmmnDetailCodeVO">
+		<result property="codeId" column="CODE_ID"/>
+		<result property="code"   column="CODE"/>
+		<result property="codeNm" column="CODE_NM"/>
+		<result property="codeDc" column="CODE_DC"/>
+		<result property="useAt"  column="USE_AT"/>
+	</resultMap>
+
+	<select id="selectCodeList" resultMap="codeResult">
+		SELECT c.CODE_ID, c.CODE_ID_NM, c.CODE_ID_DC, NVL(c.USE_AT, 'Y') AS USE_AT,
+		       ( SELECT COUNT(*) FROM COMTCCMMNDETAILCODE d WHERE d.CODE_ID = c.CODE_ID ) AS DETAIL_CNT
+		  FROM COMTCCMMNCODE c
+		 ORDER BY c.CODE_ID
+	</select>
+
+	<select id="selectCode" resultMap="codeResult">
+		SELECT c.CODE_ID, c.CODE_ID_NM, c.CODE_ID_DC, NVL(c.USE_AT, 'Y') AS USE_AT,
+		       ( SELECT COUNT(*) FROM COMTCCMMNDETAILCODE d WHERE d.CODE_ID = c.CODE_ID ) AS DETAIL_CNT
+		  FROM COMTCCMMNCODE c
+		 WHERE c.CODE_ID = #{codeId}
+	</select>
+
+	<insert id="insertCode" parameterType="egovframework.com.sym.ccm.cca.service.CmmnCodeVO">
+		INSERT INTO COMTCCMMNCODE (
+			CODE_ID, CODE_ID_NM, CODE_ID_DC, USE_AT,
+			FRST_REGIST_PNTTM, FRST_REGISTER_ID
+		) VALUES (
+			#{codeId}, #{codeIdNm}, #{codeIdDc,jdbcType=VARCHAR}, #{useAt},
+			SYSDATE, #{userId,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="updateCode" parameterType="egovframework.com.sym.ccm.cca.service.CmmnCodeVO">
+		UPDATE COMTCCMMNCODE
+		   SET CODE_ID_NM = #{codeIdNm},
+		       CODE_ID_DC = #{codeIdDc,jdbcType=VARCHAR},
+		       USE_AT     = #{useAt},
+		       LAST_UPDT_PNTTM = SYSDATE,
+		       LAST_UPDUSR_ID  = #{userId,jdbcType=VARCHAR}
+		 WHERE CODE_ID = #{codeId}
+	</update>
+
+	<delete id="deleteCode">
+		DELETE FROM COMTCCMMNCODE WHERE CODE_ID = #{codeId}
+	</delete>
+
+	<!-- 상세 정렬 = CODE_DC(순번 'NN_' prefix) 우선, 순번 없는 행은 뒤(NULLS LAST 기본),
+	     동률은 CODE — 소비 쿼리(selectCmmnCodeList ORDER BY CODE_DC)와 표시 순서 일치 -->
+	<select id="selectDetailListAll" resultMap="detailResult">
+		SELECT d.CODE_ID, d.CODE, d.CODE_NM, d.CODE_DC, NVL(d.USE_AT, 'Y') AS USE_AT
+		  FROM COMTCCMMNDETAILCODE d
+		 ORDER BY d.CODE_ID, d.CODE_DC, d.CODE
+	</select>
+
+	<select id="selectDetail" resultMap="detailResult">
+		SELECT d.CODE_ID, d.CODE, d.CODE_NM, d.CODE_DC, NVL(d.USE_AT, 'Y') AS USE_AT
+		  FROM COMTCCMMNDETAILCODE d
+		 WHERE d.CODE_ID = #{codeId} AND d.CODE = #{code}
+	</select>
+
+	<insert id="insertDetail" parameterType="egovframework.com.sym.ccm.cca.service.CmmnDetailCodeVO">
+		INSERT INTO COMTCCMMNDETAILCODE (
+			CODE_ID, CODE, CODE_NM, CODE_DC, USE_AT,
+			FRST_REGIST_PNTTM, FRST_REGISTER_ID
+		) VALUES (
+			#{codeId}, #{code}, #{codeNm}, #{codeDc,jdbcType=VARCHAR}, #{useAt},
+			SYSDATE, #{userId,jdbcType=VARCHAR}
+		)
+	</insert>
+
+	<update id="updateDetail" parameterType="egovframework.com.sym.ccm.cca.service.CmmnDetailCodeVO">
+		UPDATE COMTCCMMNDETAILCODE
+		   SET CODE_NM = #{codeNm},
+		       CODE_DC = #{codeDc,jdbcType=VARCHAR},
+		       USE_AT  = #{useAt},
+		       LAST_UPDT_PNTTM = SYSDATE,
+		       LAST_UPDUSR_ID  = #{userId,jdbcType=VARCHAR}
+		 WHERE CODE_ID = #{codeId} AND CODE = #{code}
+	</update>
+
+	<delete id="deleteDetail">
+		DELETE FROM COMTCCMMNDETAILCODE WHERE CODE_ID = #{codeId} AND CODE = #{code}
+	</delete>
+
+	<delete id="deleteDetailsByCodeId">
+		DELETE FROM COMTCCMMNDETAILCODE WHERE CODE_ID = #{codeId}
+	</delete>
+
+</mapper>

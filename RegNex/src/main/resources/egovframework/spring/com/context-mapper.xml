@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+	
+    <!-- 실행환경에서 빈이름 참조(EgovAbstractDAO) -->
+	<bean id="egov.lobHandler" class="org.springframework.jdbc.support.lob.DefaultLobHandler" lazy-init="true" />
+
+	<!-- Mybatis setup for Mybatis Database Layer -->
+	<bean id="egov.sqlSession" class="org.mybatis.spring.SqlSessionFactoryBean">		
+		<property name="dataSource" ref="egov.dataSource"/>
+		<property name="configLocation" value="classpath:/egovframework/mapper/config/mapper-config.xml" />
+		
+		<property name="mapperLocations">
+			<list>
+				<value>classpath:/egovframework/mapper/com/**/*_${Globals.DbType}.xml</value>
+				<value>classpath:/egovframework/mapper/rlms/**/*_${Globals.DbType}.xml</value>
+			</list>
+		</property>
+	</bean>
+
+	<!-- Mybatis Session Template -->
+	<bean id="egov.sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
+		<constructor-arg ref="egov.sqlSession"/>
+	</bean>
+
+	<!--
+	  @Mapper 인터페이스를 자동으로 빈으로 등록.
+	  - 빈 이름은 인터페이스 단순명을 lowerCamelCase 로 변환 (BuseoMapper → buseoMapper).
+	  - egov.sqlSession 을 SqlSessionFactory 로 사용.
+	  - narainet.rlms.**.mapper       : RLMS 도메인 모듈.
+	  - egovframework.com.**.mapper   : 표준 확장 모듈(sym/ccm/cca 공통코드, uss/umt 내 계정).
+	    egovframework.com 의 기존 DAO 는 @Repository extends EgovComAbstractDAO 방식이라
+	    @Mapper 가 없어 스캔 대상이 아니다 (충돌 없음).
+	-->
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="narainet.rlms.**.mapper,egovframework.com.**.mapper"/>
+		<property name="sqlSessionFactoryBeanName" value="egov.sqlSession"/>
+	</bean>
+
+</beans>

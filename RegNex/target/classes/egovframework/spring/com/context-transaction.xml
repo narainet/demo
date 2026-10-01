@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+						http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.0.xsd
+						http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.0.xsd">
+
+	<bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="egov.dataSource"/>
+	</bean>
+	  
+	<tx:advice id="txAdvice" transaction-manager="txManager">
+	   <tx:attributes>
+	       <!-- best-effort 부수 작업(insertProm 의 승인워크 초기행/관련자료 카테고리 시드)은 독립 TX —
+	            REQUIRED 로 두면 내부 실패가 호출자 try-catch 에 잡혀도 외부 TX 에 rollback-only 가 마킹돼
+	            본 등록 커밋이 UnexpectedRollbackException 으로 전체 롤백됨 (2026-06-12 신규등록 불능 실사고).
+	            메서드명은 전 프로젝트에서 유일함을 확인하고 등록할 것. -->
+	       <tx:method name="createInitialWork" propagation="REQUIRES_NEW" rollback-for="Exception"/>
+	       <tx:method name="seedDefault"       propagation="REQUIRES_NEW" rollback-for="Exception"/>
+	       <tx:method name="*" propagation="REQUIRED" rollback-for="Exception"/>
+	   </tx:attributes>
+	</tx:advice>
+    
+	<aop:config>
+		<!-- ※ narainet.rlms 포함 필수 — 빠지면 RLMS 서비스 전체가 트랜잭션 없이(auto-commit) 동작.
+		     (@Transactional 은 tx:annotation-driven 미설정이라 무시됨 — 이 AOP 패턴이 유일한 트랜잭션 경계.
+		      실사고: 관련자료 첨부 실패 시 마스터/첨부가 롤백 안 되고 고아로 남음 — 2026-06-10 확인) -->
+		<aop:pointcut id="requiredTx" expression="execution(* egovframework.com..*Impl.*(..)) or
+												  execution(* org.egovframe.rte.fdl.excel.impl.*Impl.*(..)) or
+												  execution(* narainet.rlms..*Impl.*(..))"/>
+		<aop:advisor advice-ref="txAdvice" pointcut-ref="requiredTx" />
+	</aop:config>
+
+</beans>
